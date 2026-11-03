@@ -361,12 +361,17 @@ const ENTRY_FIELDS = {
   calendar: [['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'], ['time', 'เวลา'], ['title', 'หัวข้อตารางงาน'], ['category', 'ประเภทตารางงาน'], ['location', 'สถานที่'], ['details', 'รายละเอียด']],
   field77: [['date', 'วันที่เดินทาง'], ['title', 'หัวข้อการเดินทาง'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
 };
+const CALENDAR_ADD_FIELDS = [
+  ['date', 'วันที่'], ['category', 'ประเภทตารางงาน'], ['details', 'รายละเอียด (ไม่บังคับ)'],
+];
 const STATUS_OPTIONS = {
   field77: ['ยังไม่เริ่ม', 'กำลังดำเนินการ', 'เสร็จสิ้น', 'ยกเลิก'],
 };
+const CALENDAR_BASE_TYPE = 'ประจำการฟินิกซ์';
+const CALENDAR_BASE_LABEL = 'ประจำการบัญชาการสูงสุด';
 const CALENDAR_TYPES = {
   'พำนักต่างประเทศ': 'abroad',
-  'ประจำการฟินิกซ์': 'base',
+  [CALENDAR_BASE_TYPE]: 'base',
   'ประจำการส่วนหน้า': 'duty-front',
   'ประจำการสั่งการ': 'duty-command',
   'ประจำการค่ายยุทธวิธี': 'duty-tactical',
@@ -768,7 +773,7 @@ function renderOverview(target) {
   const categories = new Set((data?.calendar || [])
     .filter(entry => isDate(entry.date) && entry.date <= today && calendarEndDate(entry) >= today)
     .map(entry => entry.category).filter(Boolean));
-  const statuses = [...categories].map(category => element('span', 'calendar-tag ' + calendarCategory(category), category));
+  const statuses = [...categories].map(category => element('span', 'calendar-tag ' + calendarCategory(category), calendarTypeLabel(category)));
   schedule.replaceChildren(...(statuses.length ? statuses : [
     element('span', 'calendar-tag', data ? 'ไม่มีรายการในปฏิทิน' : isLoading ? 'กำลังโหลดสถานะ' : 'ยังไม่มีข้อมูลสถานะ'),
   ]));
@@ -790,6 +795,15 @@ function renderOverview(target) {
     grid.append(card);
   });
   target.append(grid);
+}
+
+function calendarTypeLabel(category) {
+  return category === CALENDAR_BASE_TYPE ? CALENDAR_BASE_LABEL : category;
+}
+
+function entryDisplayTitle(key, entry) {
+  return key === 'calendar' && entry.category === CALENDAR_BASE_TYPE && entry.title === CALENDAR_BASE_TYPE
+    ? CALENDAR_BASE_LABEL : entry.title;
 }
 
 function calendarCategory(category) {
@@ -827,9 +841,11 @@ function renderCalendarRangeRows(body, dates, ranges) {
       const classes = ['calendar-tag', 'calendar-range', calendarCategory(entry.category)];
       if (entry.date < dates[start]) classes.push('continues-left');
       if (endDate > dates[end]) classes.push('continues-right');
-      const bar = button(classes.join(' '), entry.title, () => showDetail('calendar', entry));
-      bar.title = [entry.category, entry.title].filter(Boolean).join(' · ');
-      bar.setAttribute('aria-label', [entry.title, entry.category, formatDate(entry.date), formatDate(endDate)]
+      const title = entryDisplayTitle('calendar', entry);
+      const category = calendarTypeLabel(entry.category);
+      const bar = button(classes.join(' '), title, () => showDetail('calendar', entry));
+      bar.title = [category, title].filter(Boolean).join(' · ');
+      bar.setAttribute('aria-label', [title, category, formatDate(entry.date), formatDate(endDate)]
         .filter(Boolean).join(' · '));
       cell.append(bar);
       column = end + 1;
@@ -872,7 +888,7 @@ function renderCalendar(target) {
 
   const legend = element('div', 'calendar-legend');
   Object.keys(CALENDAR_TYPES).forEach(category => {
-    legend.append(element('span', 'calendar-tag ' + calendarCategory(category), category));
+    legend.append(element('span', 'calendar-tag ' + calendarCategory(category), calendarTypeLabel(category)));
   });
 
   const calendar = element('table', 'calendar-grid');
@@ -910,9 +926,10 @@ function renderCalendar(target) {
       control.setAttribute('aria-label', formatDate(date) + ' · ' + entries.length + ' รายการ');
       control.append(element('strong', 'calendar-number', String(day)));
       singleDayEntries.slice(0, 2).forEach(entry => {
+        const title = entryDisplayTitle('calendar', entry);
         const tag = element('span', 'calendar-tag ' + calendarCategory(entry.category),
-          [entry.time, entry.title].filter(Boolean).join(' '));
-        tag.title = [entry.category, entry.title].filter(Boolean).join(' · ');
+          [entry.time, title].filter(Boolean).join(' '));
+        tag.title = [calendarTypeLabel(entry.category), title].filter(Boolean).join(' · ');
         control.append(tag);
       });
       if (singleDayEntries.length > 2) control.append(element('span', 'calendar-more', '+' + (singleDayEntries.length - 2)));
@@ -972,10 +989,10 @@ function appendEntries(panel, key, entries, emptyText) {
     const subtitle = key === 'calendar' ? entry.location :
       [AREAS[entry.province]?.name, entry.district ? districtLabel(entry.province, entry.district) : 'ระดับจังหวัด']
         .filter(Boolean).join(' · ');
-    summary.append(element('strong', '', entry.title));
+    summary.append(element('strong', '', entryDisplayTitle(key, entry)));
     if (subtitle) summary.append(element('span', 'caption', subtitle));
     const badge = key === 'calendar' && entry.category
-      ? element('span', 'calendar-tag ' + calendarCategory(entry.category), entry.category)
+      ? element('span', 'calendar-tag ' + calendarCategory(entry.category), calendarTypeLabel(entry.category))
       : entry.status ? chip(entry.status) : element('span');
     row.append(when, summary, badge);
     panel.append(row);
@@ -1311,7 +1328,7 @@ function chip(label) {
 
 function showDetail(key, entry) {
   byId('detailKicker').textContent = SECTIONS[key].english;
-  byId('detailTitle').textContent = entry.title;
+  byId('detailTitle').textContent = entryDisplayTitle(key, entry);
   const body = byId('detailBody');
   const list = element('dl');
   if (key === 'field77') {
@@ -1321,7 +1338,8 @@ function showDetail(key, entry) {
   }
   for (const [field, label] of ENTRY_FIELDS[key]) {
     if (field === 'title' || field === 'details' || !entry[field]) continue;
-    const value = field === 'date' || field === 'endDate' ? formatDate(entry[field]) : entry[field];
+    const value = field === 'date' || field === 'endDate' ? formatDate(entry[field])
+      : field === 'category' ? calendarTypeLabel(entry[field]) : entry[field];
     const content = element('dd', '', value);
     list.append(element('dt', '', field === 'endDate' ? 'วันสิ้นสุด' : label), content);
   }
@@ -1353,7 +1371,7 @@ function appendRelated(target, entry) {
     for (const other of data[key]) {
       if (!other.id || other.id === entry.id ||
           (entry.relatedId !== other.id && other.relatedId !== entry.id)) continue;
-      list.append(button('related-link', SECTIONS[key].label + ' · ' + other.title, () => showDetail(key, other)));
+      list.append(button('related-link', SECTIONS[key].label + ' · ' + entryDisplayTitle(key, other), () => showDetail(key, other)));
     }
   }
   if (list.childElementCount) {
@@ -1372,23 +1390,29 @@ function rpcErrorText(error) {
 function openEntryForm(key = currentSection, existing = null) {
   if (isLoading || !data || !ENTRY_FIELDS[key]) return;
   if (key === 'field77' && !existing && !areaView.province) return;
+  const addingCalendar = key === 'calendar' && !existing;
+  const formFields = addingCalendar ? CALENDAR_ADD_FIELDS : ENTRY_FIELDS[key];
   entryRequest = existing ? { section: key, id: existing.id, row: existing.row, previous: { ...existing } }
     : { section: key, id: randomPhoenixId() };
-  byId('entryTitle').textContent = existing ? 'แก้ไขข้อมูล · ' + existing.title : 'เพิ่มข้อมูล · ' + SECTIONS[key].label;
+  byId('entryTitle').textContent = existing ? 'แก้ไขข้อมูล · ' + entryDisplayTitle(key, existing) : 'เพิ่มข้อมูล · ' + SECTIONS[key].label;
   const fields = byId('entryFields');
   fields.replaceChildren();
   if (key === 'field77') appendAreaFields(fields, existing || areaView);
-  for (const [field, title] of ENTRY_FIELDS[key]) {
+  for (const [field, title] of formFields) {
     const label = element('label', '', title);
-    const choices = field === 'category' ? Object.keys(CALENDAR_TYPES).filter(type => !CALENDAR_DUTY_TYPES.includes(type))
+    const choices = field === 'category'
+      ? Object.keys(CALENDAR_TYPES).filter(type => addingCalendar || !CALENDAR_DUTY_TYPES.includes(type))
       : field === 'status' ? STATUS_OPTIONS[key] : null;
     const control = element(choices ? 'select' : field === 'details' ? 'textarea' : 'input');
     let value = existing?.[field] ?? (field === 'date' ? (key === 'calendar' ? selectedCalendarDate || data.today : data.today) : '');
-    if (field === 'category' && CALENDAR_DUTY_TYPES.includes(value)) value = 'ประจำการฟินิกซ์';
+    if (field === 'title' && existing) value = entryDisplayTitle(key, existing);
+    if (field === 'category' && CALENDAR_DUTY_TYPES.includes(value)) value = CALENDAR_BASE_TYPE;
     control.name = field;
     if (choices) {
       control.append(new Option(field === 'category' ? 'เลือกประเภทตารางงาน' : 'ไม่ระบุ', ''));
-      choices.forEach(choice => control.append(new Option(choice, choice)));
+      choices.forEach(choice => {
+        control.append(new Option(field === 'category' ? calendarTypeLabel(choice) : choice, choice));
+      });
       if (value && !choices.includes(value)) control.append(new Option(value, value));
     } else if (field === 'date' || field === 'endDate' || field === 'time') {
       const type = field === 'time' ? 'time' : 'date';
@@ -1401,7 +1425,7 @@ function openEntryForm(key = currentSection, existing = null) {
     control.required = field === 'title' || (key === 'calendar' && (field === 'date' || field === 'category'));
     label.append(control);
     fields.append(label);
-    if (field === 'category') {
+    if (field === 'category' && !addingCalendar) {
       const dutyLabel = element('label', '', 'จุดประจำการ');
       const duty = element('select');
       duty.name = 'duty';
@@ -1410,13 +1434,13 @@ function openEntryForm(key = currentSection, existing = null) {
       duty.value = CALENDAR_DUTY_TYPES.includes(existing?.category) ? existing.category : '';
       dutyLabel.append(duty);
       fields.append(dutyLabel);
-      const toggleDuty = () => { dutyLabel.hidden = control.value !== 'ประจำการฟินิกซ์'; };
+      const toggleDuty = () => { dutyLabel.hidden = control.value !== CALENDAR_BASE_TYPE; };
       control.addEventListener('change', toggleDuty);
       toggleDuty();
     }
   }
 
-  if (key === 'calendar') {
+  if (key === 'calendar' && !addingCalendar) {
     const start = fields.querySelector('[name="date"]');
     const end = fields.querySelector('[name="endDate"]');
     const syncMinimum = () => { end.min = start.value; };
@@ -1424,25 +1448,28 @@ function openEntryForm(key = currentSection, existing = null) {
     syncMinimum();
   }
 
+  byId('entryRelatedLabel').hidden = addingCalendar;
   const links = byId('entryRelated');
   links.replaceChildren(new Option('ไม่เชื่อมโยง', ''));
-  for (const otherKey of Object.keys(ENTRY_FIELDS)) {
-    if (otherKey === key) continue;
-    const group = element('optgroup');
-    group.label = SECTIONS[otherKey].label;
-    data[otherKey].filter(entry => entry.id).forEach(entry => {
-      const date = entry.date ? ' · ' + formatDate(entry.date, true) : '';
-      group.append(new Option(entry.title + date, entry.id));
-    });
-    if (group.childElementCount) links.append(group);
+  if (!addingCalendar) {
+    for (const otherKey of Object.keys(ENTRY_FIELDS)) {
+      if (otherKey === key) continue;
+      const group = element('optgroup');
+      group.label = SECTIONS[otherKey].label;
+      data[otherKey].filter(entry => entry.id).forEach(entry => {
+        const date = entry.date ? ' · ' + formatDate(entry.date, true) : '';
+        group.append(new Option(entryDisplayTitle(otherKey, entry) + date, entry.id));
+      });
+      if (group.childElementCount) links.append(group);
+    }
+    if (existing?.relatedId && !Array.from(links.options).some(option => option.value === existing.relatedId)) {
+      links.append(new Option('การเชื่อมโยงเดิม', existing.relatedId));
+    }
+    links.value = existing?.relatedId || '';
   }
-  if (existing?.relatedId && !Array.from(links.options).some(option => option.value === existing.relatedId)) {
-    links.append(new Option('การเชื่อมโยงเดิม', existing.relatedId));
-  }
-  links.value = existing?.relatedId || '';
   byId('entryError').hidden = true;
   byId('entryDialog').showModal();
-  fields.querySelector('[name="title"]')?.focus();
+  fields.querySelector(addingCalendar ? '[name="date"]' : '[name="title"]')?.focus();
 }
 
 function appendAreaFields(target, area) {
@@ -1492,12 +1519,20 @@ function submitEntry(event) {
   const relatedId = fields.relatedId;
   delete fields.relatedId;
   const { section, id, row, previous } = entryRequest;
+  if (section === 'calendar' && !previous) {
+    if (!Object.hasOwn(CALENDAR_TYPES, fields.category)) {
+      entryError('กรุณาเลือกประเภทตารางงาน');
+      return;
+    }
+    fields.title = calendarTypeLabel(fields.category);
+  }
   if (!fields.title.trim()) {
     entryError('กรุณากรอกหัวข้อ');
     return;
   }
   if (section === 'calendar') {
-    if (fields.category === 'ประจำการฟินิกซ์' && fields.duty) fields.category = fields.duty;
+    if (previous && fields.title === entryDisplayTitle(section, previous)) fields.title = previous.title;
+    if (fields.category === CALENDAR_BASE_TYPE && fields.duty) fields.category = fields.duty;
     delete fields.duty;
     if (!isDate(fields.date) || (fields.endDate && !isDate(fields.endDate))) {
       entryError('กรุณาระบุวันที่ให้ถูกต้อง');
@@ -1565,7 +1600,7 @@ function sampleData(now) {
       { title: 'สังกัด', details: 'สถาบันฟินิกซ์' },
     ],
     calendar: [
-      { date: today, time: '09:00', title: 'ประจำการสำนักงานใหญ่', category: 'ประจำการฟินิกซ์', location: 'สถาบันฟินิกซ์' },
+      { date: today, time: '09:00', title: 'ประจำการสำนักงานใหญ่', category: CALENDAR_BASE_TYPE, location: 'สถาบันฟินิกซ์' },
       { date: today, time: '13:30', title: 'เดินทางไปจุดประสานงาน', category: 'เดินทางในประเทศ', location: 'เชียงราย' },
     ],
     field77: [
