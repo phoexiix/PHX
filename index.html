@@ -126,8 +126,7 @@ dialog::backdrop { background: #101c27ad; }
 #entryFields { display: grid; gap: 10px; }
 .entry-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
 .entry-form .notice { margin: 0; }
-.delete-action { color: #8b1425; border-color: #cb9ba3; }
-#detailBody .delete-action { margin-inline-start: 8px; }
+.secondary-action.delete-action { color: #8b1425; border-color: #cb9ba3; }
 .related-items { display: grid; gap: 5px; margin-top: 14px; }
 .related-link { color: var(--gold-ink); background: transparent; border: 0; text-align: left; padding: 4px 0; text-decoration: underline; overflow-wrap: anywhere; }
 .notice.success { color: #32614e; background: #e6f1e9; border-color: #c7e0d1; }
@@ -245,6 +244,11 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .calendar-more { grid-row: 4; padding-left: 2px; color: var(--muted); font-size: 10px; line-height: 10px; }
 .calendar-daily { margin-top: 14px; }
 .calendar-daily .panel-head button { flex: none; }
+.calendar-daily-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding-inline-end: 17px; }
+.calendar-daily-row + .calendar-daily-row { border-top: 1px solid #eeece6; }
+@media (max-width: 360px) {
+  .calendar-daily-row { padding-inline-end: 11px; }
+}
 @media (max-width: 690px) {
   .calendar-grid {
     --calendar-day-height: 76px;
@@ -1069,7 +1073,15 @@ function appendEntries(panel, key, entries, emptyText) {
       ? element('span', 'calendar-tag ' + calendarCategory(entry.category), calendarTypeLabel(entry.category))
       : entry.status ? chip(entry.status) : element('span');
     row.append(when, summary, badge);
-    panel.append(row);
+    if (key === 'calendar') {
+      const item = element('div', 'calendar-daily-row');
+      const remove = button('secondary-action delete-action', 'ลบ', () => openCalendarDelete(entry));
+      remove.setAttribute('aria-label', 'ลบรายการ ' + entryDisplayTitle(key, entry));
+      item.append(row, remove);
+      panel.append(item);
+    } else {
+      panel.append(row);
+    }
   });
 }
 
@@ -1435,9 +1447,6 @@ function showDetail(key, entry) {
     if (byId('summaryDialog').open) byId('summaryDialog').close();
     openEntryForm(key, current);
   }));
-  if (key === 'calendar') {
-    body.append(button('secondary-action delete-action', 'ลบรายการ', () => openCalendarDelete(entry)));
-  }
   if (!byId('dialog').open) byId('dialog').showModal();
 }
 
@@ -1462,8 +1471,8 @@ function openCalendarDelete(entry) {
       if (isPreview) data.calendar = data.calendar.filter(item => item !== entry);
       else data = await phoenixRequest('deletePhoenixCalendarEntry', { previous: entry });
       dialog.close();
-      byId('dialog').close();
       render();
+      byId('calendarSelected')?.focus({ preventScroll: true });
       notice(isPreview ? 'ลบรายการตัวอย่างแล้ว' : 'ลบรายการปฏิทินแล้ว');
       byId('notice').classList.add('success');
     } catch (failure) {
