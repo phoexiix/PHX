@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>พื้นที่ส่วนตัวผู้บัญชาการสูงสุด | สถาบันฟินิกซ์</title>
+<style>
+:root {
+  color-scheme: light;
+  --navy: #142431;
+  --navy-deep: #0d1822;
+  --gold: #dcb777;
+  --gold-ink: #815a2e;
+  --ink: #202c36;
+  --muted: #5c686f;
+  --paper: #f4f2ed;
+  --line: #e5e2da;
+  --white: #fff;
+  font-family: "Noto Sans Thai", "Leelawadee UI", Tahoma, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; color: var(--ink); background: var(--paper); font-size: 14px; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid #b67537; outline-offset: 3px; }
+button:disabled { cursor: wait; opacity: .65; }
+.icon { width: 19px; height: 19px; flex: none; }
+.shell { width: min(1280px, 100%); margin: auto; padding: 0 40px; }
+.mast { background: var(--navy-deep); color: white; border-bottom: 1px solid #ffffff1f; }
+.mast .shell { min-height: 74px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 13px; }
+.brand-mark { width: 42px; height: 42px; color: var(--gold); border: 1px solid #dcb77760; border-radius: 8px; padding: 6px; flex: none; }
+.brand strong { display: block; font-size: 16px; }
+.kicker { font: 700 10px/1.4 Arial, sans-serif; letter-spacing: .19em; }
+.brand .kicker { display: block; margin-top: 4px; color: #c4a675; }
+.connection { display: flex; align-items: center; gap: 8px; color: #d0d9dd; font-size: 12px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #82bfaa; flex: none; }
+.connection[data-state="demo"] .dot, .connection[data-state="loading"] .dot { background: var(--gold); }
+.connection[data-state="error"] .dot { background: #ef9987; }
+.hero { overflow: hidden; background: linear-gradient(102deg,#152632,#203643); color: #fff; }
+.hero .shell { position: relative; min-height: 245px; padding-top: 46px; padding-bottom: 38px; isolation: isolate; }
+.hero-art { position: absolute; width: min(470px,53%); height: 100%; top: 0; right: 0; z-index: -1; color: var(--gold); opacity: .82; }
+.hero .kicker { display: flex; align-items: center; gap: 10px; color: var(--gold); }
+.hero .kicker::before { content: ""; width: 25px; height: 1px; background: currentColor; }
+h1 { font-size: clamp(28px, 4vw, 48px); margin: 11px 0 7px; line-height: 1.22; letter-spacing: -.025em; }
+.hero p { margin: 0 0 21px; color: #e0e8ed; font-size: 15px; }
+.today { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #ffffff30; background: #12232e; padding: 8px 11px; border-radius: 5px; font-size: 12px; color: #e9d4b0; }
+.today .icon { width: 15px; height: 15px; }
+.mast-actions { display: flex; align-items: center; gap: 16px; }
+.refresh { display: flex; align-items: center; gap: 7px; border: 1px solid #ffffff3b; border-radius: 6px; padding: 7px 10px; color: white; background: transparent; }
+.refresh:hover { background: #ffffff19; }
+.refresh .icon { width: 16px; height: 16px; }
+.workspace { display: grid; grid-template-columns: 233px minmax(0, 1fr); gap: 28px; align-items: start; padding-top: 34px; padding-bottom: 48px; min-height: calc(100vh - 126px); }
+body[data-page="home"] .workspace { display: block; min-height: auto; }
+body:not([data-page="home"]) .hero { display: none; }
+.sidebar { color: #e0e9ee; background: #152632; border-radius: 12px; overflow: hidden; position: sticky; top: 18px; }
+.sidebar-head { padding: 19px 18px 15px; border-bottom: 1px solid #ffffff20; }
+.sidebar-head .kicker { display: block; color: var(--gold); }
+.sidebar-head strong { display: block; margin-top: 6px; font-size: 16px; }
+.nav-items { display: grid; gap: 4px; padding: 10px; }
+.nav-items button { text-align: left; display: flex; align-items: center; gap: 9px; min-height: 42px; border: 1px solid transparent; border-radius: 6px; padding: 6px 9px; background: transparent; color: inherit; }
+.nav-items button:hover { background: #ffffff13; }
+.nav-items button[aria-current="page"] { color: #f2d9ac; background: #dcb77721; border-color: #dcb77740; font-weight: 700; }
+.menu-toggle { display: none; }
+main { min-width: 0; }
+.section-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 14px; }
+.section-head .kicker, .panel .kicker, dialog .kicker { color: var(--gold-ink); }
+h2 { font-size: 23px; margin: 3px 0 0; }
+h3 { font-size: 17px; margin: 4px 0 0; }
+.caption { color: var(--muted); font-size: 12px; }
+.notice { margin: 0 0 18px; padding: 10px 13px; border-radius: 6px; background: #fff6e3; color: #745121; border: 1px solid #ecd8aa; }
+.notice.error { color: #8c382f; background: #fff2ef; border-color: #edc8bf; }
+.portal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.portal-card { min-height: 170px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto 1fr; gap: 7px 12px; align-items: start; text-align: left; color: var(--ink); background: white; border: 1px solid #e3dfd4; border-radius: 11px; padding: 18px; }
+.portal-card:hover { border-color: #af8956; background: #fffdf8; }
+.portal-card.featured { grid-column: span 2; background: linear-gradient(120deg, #263e4b, #152632); color: #fff; border-color: #263e4b; }
+.portal-card.featured:hover { border-color: #b88b55; }
+.portal-card strong { grid-column: 1 / -1; font-size: 18px; }
+.portal-card .caption { grid-column: 1 / -1; }
+.portal-card.featured .caption { color: #e2edf0; }
+.portal-icon { display: grid; place-items: center; width: 39px; height: 39px; border-radius: 8px; background: #f4ecdf; color: #79542c; }
+.portal-card.featured .portal-icon { background: #dcb77723; color: #eed0a0; }
+.portal-meta { text-align: right; color: #78552e; font-size: 12px; font-weight: 700; padding-top: 9px; }
+.portal-card.featured .portal-meta { color: #eed0a0; }
+.profile-fields { display: grid; grid-template-columns: minmax(105px, 30%) minmax(0, 1fr); margin: 0; }
+.profile-fields dt, .profile-fields dd { margin: 0; padding: 14px 17px; border-bottom: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+.profile-fields dt { color: var(--muted); background: #faf9f6; }
+.profile-fields dd { color: var(--ink); }
+.profile-fields dt:last-of-type, .profile-fields dd:last-of-type { border-bottom: 0; }
+.panel { background: white; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.panel-head { padding: 16px 17px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.item { display: grid; grid-template-columns: 67px minmax(0,1fr) auto; width: 100%; align-items: center; gap: 12px; padding: 13px 17px; min-height: 68px; background: white; border: 0; color: var(--ink); text-align: left; }
+.item + .item { border-top: 1px solid #eeece6; }
+.item:focus-visible { outline-offset: -3px; }
+.item strong, .item .caption { display: block; overflow-wrap: anywhere; }
+.item .caption { margin-top: 3px; }
+.item-time { display: block; color: #705634; font-weight: 700; font-variant-numeric: tabular-nums; }
+.item-date { display: block; color: var(--muted); font-size: 11px; }
+.approval-item { grid-template-columns: minmax(0,1fr) auto; }
+.chip { color: #496370; background: #edf1f4; display: inline-block; max-width: 125px; overflow-wrap: anywhere; border-radius: 4px; padding: 4px 7px; font-size: 11px; font-weight: 700; }
+.chip.amber { background: #f8eedc; color: #80511d; }
+.chip.green { background: #e6f1e9; color: #32614e; }
+.chip.red { background: #fae9e5; color: #963e32; }
+.empty { margin: 0; padding: 22px 17px; color: var(--muted); }
+.list-head { color: var(--muted); background: #faf9f6; padding: 9px 17px; font-size: 12px; border-bottom: 1px solid var(--line); }
+.filters { display: flex; gap: 7px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.filters button { border: 1px solid var(--line); border-radius: 5px; padding: 5px 11px; background: white; color: var(--muted); }
+.filters button[aria-pressed="true"] { background: var(--navy); color: white; border-color: var(--navy); }
+footer { border-top: 1px solid var(--line); }
+footer .shell { display: flex; gap: 12px; justify-content: space-between; padding-top: 14px; padding-bottom: 14px; color: var(--muted); font-size: 11px; }
+dialog { width: min(510px, calc(100% - 28px)); max-height: calc(100% - 32px); border: 1px solid var(--line); border-radius: 11px; padding: 0; color: var(--ink); }
+dialog::backdrop { background: #101c27ad; }
+.dialog-head { padding: 18px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: start; justify-content: space-between; gap: 10px; }
+.dialog-head h2 { overflow-wrap: anywhere; }
+.close { border: 1px solid var(--line); background: white; border-radius: 5px; min-width: 34px; min-height: 34px; font-size: 21px; }
+.dialog-body { padding: 2px 20px 18px; overflow-wrap: anywhere; }
+.dialog-body dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px 16px; }
+.dialog-body dd { margin: 0; }
+.dialog-body dt { color: var(--muted); }
+.detail { white-space: pre-wrap; line-height: 1.65; }
+@media (max-width: 900px) {
+  .shell { padding-inline: 24px; }
+  .workspace { grid-template-columns: 200px minmax(0, 1fr); gap: 20px; }
+}
+@media (max-width: 690px) {
+  .shell { padding-inline: 15px; }
+  .hero .shell { min-height: 215px; padding-top: 34px; padding-bottom: 28px; }
+  .hero-art { opacity: .33; }
+  .workspace { display: block; padding-top: 19px; }
+  .sidebar { display: none; position: static; width: min(100%, 320px); margin-bottom: 13px; }
+  .sidebar.menu-open { display: block; }
+  .menu-toggle { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 15px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 6px; color: var(--navy); background: white; }
+  .portal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .portal-card { min-height: 145px; padding: 12px; }
+  .portal-card strong { font-size: 16px; }
+  .mast-actions { gap: 8px; }
+  .refresh span { display: none; }
+}
+@media (max-width: 360px) {
+  .item { grid-template-columns: 48px minmax(0,1fr) auto; gap: 7px; padding-inline: 11px; }
+  .approval-item { grid-template-columns: minmax(0,1fr) auto; }
+  .brand .kicker { letter-spacing: .08em; }
+  .connection { font-size: 10px; }
+}
+</style>
+</head>
+<body data-page="home">
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="phoenix" viewBox="0 0 100 100">
+      <path fill="currentColor" d="M50 86 39 64 11 51 3 23l19 19 20 6 7-13 10-6 10 7-12 1-4 12 25-7 19-19-8 28-28 13-11 22Z"/>
+      <path fill="currentColor" d="M7 53 23 61 40 69 47 84 23 73ZM93 53 77 61 60 69 53 84 77 73ZM50 89l7-10-7 17-7-17Z"/>
+      <path fill="none" stroke="currentColor" stroke-width="2" d="M19 30 29 38 41 42m40-12-10 8-12 4"/>
+    </symbol>
+    <symbol id="i-profile" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 20v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2Z"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-agenda" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h2m4 0h2"/></symbol>
+    <symbol id="i-approvals" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6m-12 6 2 2 5-5"/></symbol>
+    <symbol id="i-missions" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+    <symbol id="i-briefings" viewBox="0 0 24 24"><path d="M5 3h12l3 3v15H5Zm4 6h7m-7 4h7m-7 4h5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 1 0-2 8m2-14v6h-6"/></symbol>
+  </defs>
+</svg>
+<header class="mast">
+  <div class="shell">
+    <div class="brand">
+      <svg class="brand-mark" aria-hidden="true"><use href="#phoenix"/></svg>
+      <div><strong>สถาบันฟินิกซ์</strong><span class="kicker">PHOENIX INSTITUTE</span></div>
+    </div>
+    <div class="mast-actions">
+      <div id="connection" class="connection" data-state="loading" role="status"><span class="dot"></span><span id="connectionText">กำลังโหลด</span></div>
+      <button class="refresh" id="refresh" type="button" aria-label="อัปเดตข้อมูล"><svg class="icon" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><use href="#i-refresh"/></svg><span>อัปเดต</span></button>
+    </div>
+  </div>
+</header>
+<section class="hero" aria-labelledby="siteTitle">
+  <div class="shell">
+    <svg class="hero-art" viewBox="0 0 470 245" aria-hidden="true">
+      <defs>
+        <pattern id="hero-grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#dcb777" stroke-opacity=".19"/></pattern>
+        <linearGradient id="hero-fade"><stop offset="0" stop-color="#000"/><stop offset=".4" stop-color="#fff"/></linearGradient>
+        <mask id="hero-mask"><path fill="url(#hero-fade)" d="M0 0h470v245H0z"/></mask>
+      </defs>
+      <path fill="url(#hero-grid)" mask="url(#hero-mask)" d="M0 0h470v245H0z"/>
+      <g fill="none" stroke="currentColor">
+        <circle cx="300" cy="122" r="89" opacity=".28"/>
+        <circle cx="300" cy="122" r="104" opacity=".24" stroke-dasharray="3 7"/>
+        <path d="M300 12v12m0 196v12M190 122h12m196 0h12" opacity=".66"/>
+      </g>
+      <use href="#phoenix" x="232" y="48" width="136" height="136"/>
+    </svg>
+    <div class="kicker">SUPREME COMMANDER / PRIVATE PORTAL</div>
+    <h1 id="siteTitle">ผู้บัญชาการสูงสุด</h1>
+    <p>พื้นที่ส่วนตัวสำหรับดูข้อมูลและติดตามงานของผู้บัญชาการสูงสุด</p>
+    <div class="today"><svg class="icon" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><use href="#i-agenda"/></svg><span id="today"></span></div>
+  </div>
+</section>
+<div class="workspace shell">
+  <button id="menuToggle" class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar" hidden>☰ <span>เมนูทั้งหมด</span></button>
+  <aside id="sidebar" class="sidebar" hidden>
+    <div class="sidebar-head">
+      <span class="kicker">COMMANDER PORTAL</span>
+      <strong>เมนูส่วนตัว</strong>
+    </div>
+    <nav class="nav-items" id="navItems" aria-label="เมนูทั้งหมด"></nav>
+  </aside>
+  <main id="main">
+    <div id="notice" class="notice" role="status" hidden></div>
+    <div class="section-head">
+      <div><div class="kicker" id="sectionKicker"></div><h2 id="sectionTitle" tabindex="-1"></h2></div>
+      <span id="updated" class="caption"></span>
+    </div>
+    <div id="content"></div>
+  </main>
+</div>
+<footer><div class="shell"><span>สำนักงานผู้บัญชาการสูงสุด · สถาบันฟินิกซ์</span><span>เวลาไทย (UTC+7)</span></div></footer>
+<dialog id="dialog" aria-labelledby="detailTitle">
+  <div class="dialog-head">
+    <div><div class="kicker" id="detailKicker"></div><h2 id="detailTitle"></h2></div>
+    <form method="dialog"><button type="submit" class="close" aria-label="ปิดรายละเอียด" autofocus>×</button></form>
+  </div>
+  <div class="dialog-body" id="detailBody"></div>
+</dialog>
+<script>
+'use strict';
+
+const SECTIONS = {
+  home: { label: 'หน้าหลัก', english: 'PRIVATE WORKSPACE' },
+  profile: { label: 'ข้อมูลผู้บัญชาการ', english: 'COMMANDER PROFILE', empty: 'ยังไม่มีข้อมูลผู้บัญชาการ' },
+  agenda: { label: 'กำหนดการ', english: 'COMMAND SCHEDULE', empty: 'ยังไม่มีกำหนดการ' },
+  approvals: { label: 'เรื่องเสนอพิจารณา', english: 'DECISION QUEUE', empty: 'ยังไม่มีเรื่องเสนอพิจารณา' },
+  missions: { label: 'ภารกิจ', english: 'MISSION TRACKER', empty: 'ยังไม่มีภารกิจ' },
+  briefings: { label: 'รายงานสรุป', english: 'BRIEFINGS', empty: 'ยังไม่มีรายงานสรุป' },
+};
+const APPROVAL_CLOSED = ['อนุมัติ', 'ไม่อนุมัติ', 'พิจารณาแล้ว', 'ถอนเรื่อง', 'ยกเลิก'];
+const MISSION_CLOSED = ['เสร็จสิ้น', 'ยกเลิก'];
+const DATE_FORMAT = new Intl.DateTimeFormat('th-TH', { dateStyle: 'full', timeZone: 'UTC' });
+const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const BANGKOK_DATE = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+const BANGKOK_TIME = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit',
+});
+const byId = id => document.getElementById(id);
+const isAppsScript = Boolean(window.google?.script?.run);
+let data = null;
+let currentSection = 'home';
+let currentFilter = 'all';
+let isLoading = false;
+
+function dateKey(now) {
+  const parts = Object.fromEntries(BANGKOK_DATE.formatToParts(now).map(part => [part.type, part.value]));
+  return parts.year + '-' + parts.month + '-' + parts.day;
+}
+
+function isDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+  const date = new Date(value + 'T00:00:00Z');
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+}
+
+function formatDate(value, short = false) {
+  if (!isDate(value)) return value || 'ไม่ระบุวันที่';
+  return (short ? SHORT_DATE_FORMAT : DATE_FORMAT).format(new Date(value + 'T00:00:00Z'));
+}
+
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function icon(name) {
+  const namespace = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(namespace, 'svg');
+  svg.setAttribute('class', 'icon');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.6');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS(namespace, 'use');
+  use.setAttribute('href', '#i-' + name);
+  svg.append(use);
+  return svg;
+}
+
+function button(className, text, action) {
+  const node = element('button', className, text);
+  node.type = 'button';
+  node.addEventListener('click', action);
+  return node;
+}
+
+function setMobileMenu(open) {
+  byId('sidebar').classList.toggle('menu-open', open);
+  byId('menuToggle').setAttribute('aria-expanded', String(open));
+}
+
+function navigate(section) {
+  currentSection = section;
+  currentFilter = 'all';
+  setMobileMenu(false);
+  render();
+  byId('sectionTitle').focus({ preventScroll: true });
+  window.scrollTo(0, 0);
+}
+
+function setupNavigation() {
+  Object.entries(SECTIONS).forEach(([key, section]) => {
+    const node = button('', undefined, () => navigate(key));
+    node.dataset.section = key;
+    node.append(icon(key), element('span', '', section.label));
+    byId('navItems').append(node);
+  });
+}
+
+function notice(text, error = false) {
+  const node = byId('notice');
+  node.textContent = text;
+  node.classList.toggle('error', error);
+  node.hidden = !text;
+}
+
+function connection(state, label) {
+  byId('connection').dataset.state = state;
+  byId('connectionText').textContent = label;
+}
+
+function refresh() {
+  if (isLoading) return;
+  if (!isAppsScript) {
+    data = sampleData(new Date());
+    connection('demo', 'โหมดตัวอย่าง');
+    notice('ข้อมูลบนหน้านี้เป็นตัวอย่างสำหรับดูหน้าตาเว็บ');
+    render();
+    return;
+  }
+  isLoading = true;
+  byId('refresh').disabled = true;
+  byId('content').setAttribute('aria-busy', 'true');
+  connection('loading', 'กำลังโหลดข้อมูล');
+  notice('');
+  google.script.run.withSuccessHandler(result => {
+    data = result;
+    finishRefresh('ready', 'เชื่อมต่อ Google Sheets');
+    render();
+  }).withFailureHandler(error => {
+    finishRefresh('error', 'โหลดข้อมูลไม่สำเร็จ');
+    notice((data ? 'กำลังแสดงข้อมูลจากการโหลดครั้งล่าสุด · ' : '') +
+      (error?.message || 'กรุณาลองกดอัปเดตข้อมูลอีกครั้ง'), true);
+    if (!data) render();
+  }).getPhoenixDashboard();
+}
+
+function finishRefresh(state, label) {
+  isLoading = false;
+  byId('refresh').disabled = false;
+  byId('content').setAttribute('aria-busy', 'false');
+  connection(state, label);
+}
+
+function render() {
+  const section = SECTIONS[currentSection];
+  const target = byId('content');
+  byId('today').textContent = formatDate(data?.today || dateKey(new Date()));
+  const isHome = currentSection === 'home';
+  document.body.dataset.page = currentSection;
+  byId('sidebar').hidden = isHome;
+  byId('menuToggle').hidden = isHome;
+  byId('sectionTitle').textContent = isHome ? 'เมนูส่วนตัว' : section.label;
+  byId('sectionKicker').textContent = section.english;
+  byId('updated').textContent = data ? 'อัปเดต ' + data.updatedAt + ' น.' : '';
+  for (const node of byId('navItems').children) {
+    if (node.dataset.section === currentSection) node.setAttribute('aria-current', 'page');
+    else node.removeAttribute('aria-current');
+  }
+  target.replaceChildren();
+  if (isHome) {
+    renderPortal(target);
+    return;
+  }
+  if (!data) {
+    target.append(element('p', 'empty', isLoading ? 'กำลังอ่านข้อมูลจากชีต…' : 'ยังไม่มีข้อมูลให้แสดง'));
+    return;
+  }
+  if (currentSection === 'profile') renderProfile(target);
+  else renderSection(target, currentSection);
+}
+
+function isPending(entry) {
+  return !APPROVAL_CLOSED.includes(entry.status);
+}
+
+function isOpenMission(entry) {
+  return !MISSION_CLOSED.includes(entry.status);
+}
+
+function agendaOrder(a, b) {
+  return (isDate(a.date) ? a.date : '9999').localeCompare(isDate(b.date) ? b.date : '9999') ||
+    (a.time || '99:99').padStart(5, '0').localeCompare((b.time || '99:99').padStart(5, '0'));
+}
+
+function newestFirst(a, b) {
+  return (isDate(b.date) ? b.date : '').localeCompare(isDate(a.date) ? a.date : '');
+}
+
+function renderPortal(target) {
+  const grid = element('div', 'portal-grid');
+  const todayAgenda = data?.agenda.filter(entry => entry.date === data.today && entry.status !== 'ยกเลิก');
+  const pending = data?.approvals.filter(isPending);
+  const active = data?.missions.filter(isOpenMission);
+  const cards = [
+    ['profile', 'ข้อมูลประจำตัว ตำแหน่ง และข้อมูลที่ต้องการเก็บไว้', 'เปิดข้อมูล'],
+    ['agenda', 'ตารางนัดหมาย การประชุม และกำหนดการ', todayAgenda && todayAgenda.length + ' วันนี้'],
+    ['approvals', 'ดูเรื่องที่หน่วยงานเสนอและสถานะการพิจารณา', pending && pending.length + ' เรื่องรอพิจารณา'],
+    ['missions', 'ติดตามงานที่รับผิดชอบและวันครบกำหนด', active && active.length + ' งานที่ยังเปิด'],
+    ['briefings', 'อ่านรายงานและสรุปความคืบหน้าจากหน่วยงาน', data && data.briefings.length + ' รายงาน'],
+  ];
+
+  cards.forEach(([key, description, meta]) => {
+    const card = button('portal-card' + (key === 'profile' ? ' featured' : ''), undefined, () => navigate(key));
+    const badge = element('span', 'portal-icon');
+    badge.append(icon(key));
+    card.append(badge, element('span', 'portal-meta', (meta || 'เปิดเมนู') + ' →'),
+      element('strong', '', SECTIONS[key].label), element('span', 'caption', description));
+    grid.append(card);
+  });
+  target.append(grid);
+}
+
+function renderProfile(target) {
+  const panel = element('section', 'panel');
+  if (data.profile.length === 0) {
+    panel.append(element('p', 'empty', 'ยังไม่มีข้อมูลผู้บัญชาการ เพิ่มหัวข้อและรายละเอียดได้ในแท็บข้อมูลผู้บัญชาการ'));
+  } else {
+    const fields = element('dl', 'profile-fields');
+    data.profile.forEach(entry => fields.append(
+      element('dt', '', entry.title),
+      element('dd', '', entry.details || '—'),
+    ));
+    panel.append(fields);
+  }
+  target.append(panel);
+}
+
+function renderSection(target, key) {
+  const panel = element('section', 'panel');
+  const filtersBySection = {
+    agenda: [['today', 'วันนี้', entry => entry.date === data.today && entry.status !== 'ยกเลิก'],
+      ['upcoming', 'ตั้งแต่วันนี้', entry => isDate(entry.date) && entry.date >= data.today && entry.status !== 'ยกเลิก']],
+    approvals: [['pending', 'รอพิจารณา', isPending]],
+    missions: [['active', 'ยังเปิดอยู่', isOpenMission]],
+    briefings: [],
+  };
+  const options = [['all', 'ทั้งหมด', () => true], ...filtersBySection[key]];
+  if (options.length > 1) {
+    const filters = element('div', 'filters');
+    options.forEach(([value, label]) => {
+      const control = button('', label, () => {
+        currentFilter = value;
+        render();
+        byId('content').querySelector('[aria-pressed="true"]')?.focus();
+      });
+      control.setAttribute('aria-pressed', String(value === currentFilter));
+      filters.append(control);
+    });
+    panel.append(filters);
+  }
+  const match = options.find(([value]) => value === currentFilter) || options[0];
+  const entries = data[key].filter(match[2]).sort(key === 'agenda' || key === 'missions' ? agendaOrder : newestFirst);
+  panel.append(element('div', 'list-head', entries.length + ' รายการ'));
+  appendEntries(panel, key, entries, currentFilter === 'all' ? SECTIONS[key].empty : 'ไม่มีรายการตามตัวกรองนี้');
+  target.append(panel);
+}
+
+function appendEntries(panel, key, entries, emptyText) {
+  if (!entries.length) panel.append(element('p', 'empty', emptyText));
+  entries.forEach(entry => {
+    const isApproval = key === 'approvals';
+    const row = button('item' + (isApproval ? ' approval-item' : ''), undefined, () => showDetail(key, entry));
+    if (!isApproval) {
+      const when = element('span');
+      if (entry.time) when.append(element('span', 'item-time', entry.time));
+      when.append(element('span', entry.time ? 'item-date' : 'item-time', formatDate(entry.date, true)));
+      row.append(when);
+    }
+    const summary = element('span');
+    const subtitle = [entry.location || entry.unit, isApproval ? formatDate(entry.date, true) : ''].filter(Boolean).join(' · ');
+    summary.append(element('strong', '', entry.title));
+    if (subtitle) summary.append(element('span', 'caption', subtitle));
+    const badge = isApproval && isPending(entry) ? entry.priority || entry.status || 'รอพิจารณา' : entry.status;
+    row.append(summary, badge ? chip(badge) : element('span'));
+    panel.append(row);
+  });
+}
+
+function chip(label) {
+  const tones = {
+    'ด่วนที่สุด': 'red', 'ไม่อนุมัติ': 'red', 'ยกเลิก': 'red',
+    'ด่วน': 'amber', 'รอพิจารณา': 'amber', 'รอยืนยัน': 'amber', 'ยังไม่เริ่ม': 'amber',
+    'ยืนยันแล้ว': 'green', 'อนุมัติ': 'green', 'เสร็จสิ้น': 'green',
+  };
+  const tone = Object.hasOwn(tones, label) ? tones[label] : '';
+  return element('span', 'chip ' + tone, label);
+}
+
+function showDetail(key, entry) {
+  byId('detailKicker').textContent = SECTIONS[key].english;
+  byId('detailTitle').textContent = entry.title;
+  const body = byId('detailBody');
+  const list = element('dl');
+  const dateLabels = { agenda: 'วันที่', approvals: 'วันที่เสนอ', missions: 'วันครบกำหนด', briefings: 'วันที่รายงาน' };
+  const pairs = [[dateLabels[key], formatDate(entry.date)], ['เวลา', entry.time],
+    ['สถานที่', entry.location], ['หน่วยงาน', entry.unit],
+    ['ความเร่งด่วน', entry.priority], ['สถานะ', entry.status]];
+  pairs.forEach(([label, value]) => {
+    if (value) list.append(element('dt', '', label), element('dd', '', value));
+  });
+  body.replaceChildren(list);
+  if (entry.details) body.append(element('h3', '', 'รายละเอียด'), element('p', 'detail', entry.details));
+  byId('dialog').showModal();
+}
+
+function sampleData(now) {
+  const today = dateKey(now);
+  const date = offset => dateKey(new Date(now.valueOf() + offset * 86400000));
+  return {
+    today, updatedAt: BANGKOK_TIME.format(now),
+    profile: [
+      { title: 'ชื่อ–นามสกุล', details: 'ตัวอย่างข้อมูลผู้บัญชาการ' },
+      { title: 'ตำแหน่ง', details: 'ผู้บัญชาการสูงสุด' },
+      { title: 'สังกัด', details: 'สถาบันฟินิกซ์' },
+      { title: 'สำนักงาน', details: 'สำนักงานผู้บัญชาการสูงสุด' },
+    ],
+    agenda: [
+      { date: today, time: '09:00', title: 'ประชุมสรุปสถานการณ์ประจำวัน', location: 'ห้องปฏิบัติการกลาง', status: 'ยืนยันแล้ว', details: 'รับฟังรายงานจากหน่วยงานและทบทวนประเด็นที่ต้องติดตามในวันนี้' },
+      { date: today, time: '13:30', title: 'ประชุมติดตามความพร้อมโครงการ CRP', location: 'ห้องประชุม PHX-02', status: 'ยืนยันแล้ว', details: 'ทบทวนกำหนดการฝึกและรายการที่ต้องประสานกับหน่วยงานที่เกี่ยวข้อง' },
+      { date: date(1), time: '10:00', title: 'ประชุมคณะผู้บริหารสถาบัน', location: 'ห้องประชุมบอร์ดบริหาร', status: 'รอยืนยัน', details: 'พิจารณาวาระการประชุมประจำสัปดาห์' },
+      { date: date(3), time: '14:00', title: 'รับฟังสรุปผลการดำเนินงานประจำสัปดาห์', location: 'สำนักงานผู้บัญชาการสูงสุด', status: 'รอยืนยัน' },
+    ],
+    approvals: [
+      { date: today, title: 'ขออนุมัติแผนฝึกโครงการ CRP', unit: 'กองอำนวยการฝึก', priority: 'ด่วนที่สุด', status: 'รอพิจารณา', details: 'เสนอกรอบกำหนดการฝึกและผู้รับผิดชอบแต่ละช่วงเพื่อพิจารณา' },
+      { date: today, title: 'ขออนุมัติกรอบจัดสรรงบประมาณ', unit: 'กองบริหารงบประมาณ', priority: 'ด่วน', status: 'รอพิจารณา' },
+      { date: date(-1), title: 'เสนอวาระประชุมสภาสูงสุดฟินิกซ์', unit: 'สำนักงานเลขานุการ', priority: 'ปกติ', status: 'รอพิจารณา' },
+    ],
+    missions: [
+      { date: date(2), title: 'ตรวจความพร้อมห้องปฏิบัติการกลาง', unit: 'กองอำนวยการ', status: 'กำลังดำเนินการ' },
+      { date: date(4), title: 'รวบรวมแผนงานของทุกหน่วย', unit: 'สำนักงานเลขานุการ', status: 'กำลังดำเนินการ' },
+      { date: date(5), title: 'จัดทำตารางเวรประจำเดือน', unit: 'กองบริหารบุคลากร', status: 'ยังไม่เริ่ม' },
+      { date: date(-1), title: 'สรุปผลการเตรียมห้องประชุม', unit: 'ฝ่ายสนับสนุน', status: 'เสร็จสิ้น' },
+    ],
+    briefings: [
+      { date: today, title: 'รายงานสถานการณ์ประจำวัน', unit: 'ห้องปฏิบัติการกลาง', status: 'ฉบับสรุป' },
+      { date: date(-1), title: 'รายงานความคืบหน้าโครงการ CRP', unit: 'กองอำนวยการฝึก', status: 'ฉบับสรุป' },
+    ],
+  };
+}
+
+setupNavigation();
+byId('menuToggle').addEventListener('click', () => {
+  const open = byId('menuToggle').getAttribute('aria-expanded') === 'true';
+  setMobileMenu(!open);
+  if (!open) byId('sidebar').querySelector('button')?.focus();
+});
+byId('sidebar').addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || byId('menuToggle').getAttribute('aria-expanded') !== 'true') return;
+  setMobileMenu(false);
+  byId('menuToggle').focus();
+});
+byId('refresh').addEventListener('click', refresh);
+refresh();
+if (isAppsScript && !data) render();
+</script>
+</body>
+</html>
