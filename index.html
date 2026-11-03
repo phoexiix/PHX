@@ -299,7 +299,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 }
 .secret-page { display: grid; gap: 16px; min-width: 0; }
 .secret-page summary { cursor: pointer; }
-.secret-send-title { display: list-item; list-style-position: inside; font-weight: 700; }
+.secret-inbox-heading { flex-wrap: wrap; }
 .secret-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .secret-hint { margin: 0; }
 .secret-provinces:not(:empty) { padding-top: 8px; }
@@ -790,7 +790,7 @@ function connection(state, label) {
 
 function refresh() {
   if (isLoading || isSaving || byId('entryDialog').open || byId('reportDialog').open ||
-      byId('calendarDeleteDialog').open || byId('simulationDialog').open) return;
+      byId('calendarDeleteDialog').open || byId('simulationDialog').open || byId('secretSendDialog')?.open) return;
   if (isPreview) {
     if (!data) {
       data = sampleData(new Date());
@@ -904,9 +904,13 @@ function renderSecretReports(target) {
 
 function createSecretPage() {
   const panel = element('div', 'secret-page');
-  const outgoing = element('details', 'panel');
-  outgoing.open = true;
-  outgoing.append(element('summary', 'panel-head secret-send-title', 'ส่งรายงานจากพื้นที่'));
+  const outgoing = element('dialog');
+  outgoing.id = 'secretSendDialog';
+  outgoing.setAttribute('aria-labelledby', 'secretSendTitle');
+  const sendHeading = element('h2', '', 'เพิ่มรายงานจากพื้นที่');
+  sendHeading.id = 'secretSendTitle';
+  const sendHeader = element('div', 'dialog-head');
+  sendHeader.append(sendHeading);
   const sendForm = element('form', 'entry-form');
   const sendFields = element('div', 'secret-fields');
   const province = element('select');
@@ -925,20 +929,30 @@ function createSecretPage() {
     sendFields.append(secretField(label, input));
   }
   const sendButton = element('button', 'primary-action', 'ส่งซองลับ');
+  const cancelSend = button('secondary-action', 'ยกเลิก', () => outgoing.close());
   const sendActions = element('div', 'entry-actions');
-  sendActions.append(sendButton);
+  sendActions.append(cancelSend, sendButton);
   const sendStatus = secretMessage();
+  const receipt = secretMessage();
+  receipt.classList.add('success');
   const eligible = element('details');
   const provinceHint = element('summary', 'caption');
   const provinceList = element('div', 'secret-toolbar secret-provinces');
   eligible.append(provinceHint, provinceList);
   sendForm.append(sendFields, eligible, secretField('หัวข้อ', title),
     secretField('รายละเอียดรายงาน', details), sendStatus, sendActions);
-  outgoing.append(sendForm);
+  outgoing.append(sendHeader, sendForm);
+  const addReport = button('primary-action', '+ เพิ่มรายงาน', () => {
+    updateProvinces();
+    setSecretMessage(sendStatus, '');
+    outgoing.showModal();
+  });
+  addReport.setAttribute('aria-haspopup', 'dialog');
+  addReport.setAttribute('aria-controls', outgoing.id);
 
   const inbox = element('section', 'panel');
-  const inboxHeading = element('div', 'panel-head');
-  inboxHeading.append(element('h3', '', 'กล่องซองลับผู้บัญชาการ'));
+  const inboxHeading = element('div', 'panel-head secret-inbox-heading');
+  inboxHeading.append(element('h3', '', 'กล่องซองลับผู้บัญชาการ'), addReport);
   const inboxBody = element('div', 'secret-inbox');
   const gate = element('form', 'entry-form secret-unlock');
   const pinInput = element('input');
@@ -964,9 +978,9 @@ function createSecretPage() {
   const close = button('secondary-action', 'ล็อกกล่อง', lockInbox);
   toolbar.append(filter, reload, close);
   controls.append(counts, toolbar);
-  inboxBody.append(gate, inboxStatus, controls, list);
+  inboxBody.append(gate, receipt, inboxStatus, controls, list);
   inbox.append(inboxHeading, inboxBody);
-  panel.append(outgoing, inbox);
+  panel.append(inbox, outgoing);
 
   let pin = '';
   let reports = [];
@@ -997,12 +1011,15 @@ function createSecretPage() {
     }));
   }
 
+  outgoing.addEventListener('cancel', event => {
+    if (sendBusy) event.preventDefault();
+  });
   sendForm.addEventListener('input', () => { submissionId = ''; });
   sendForm.addEventListener('submit', async event => {
     event.preventDefault();
     if (sendBusy) return;
     const id = submissionId ||= randomPhoenixId();
-    sendBusy = sendButton.disabled = true;
+    sendBusy = sendButton.disabled = cancelSend.disabled = true;
     const request = {
       action: 'send', id, province: province.value, reporter: reporter.value,
       kind: kind.value, priority: priority.value, title: title.value, details: details.value,
@@ -1015,12 +1032,13 @@ function createSecretPage() {
       if (!result?.received) throw new Error('ไม่ได้รับการยืนยันการส่งซอง');
       sendForm.reset();
       submissionId = '';
-      setSecretMessage(sendStatus, 'ส่งซองแล้ว · รอการพิจารณา · เลขอ้างอิง ' + id.slice(0, 8).toUpperCase());
+      outgoing.close();
+      setSecretMessage(receipt, 'ส่งซองแล้ว · รอการพิจารณา · เลขอ้างอิง ' + id.slice(0, 8).toUpperCase());
       if (pin && panel.isConnected) loadInbox(pin);
     } catch (error) {
       setSecretMessage(sendStatus, rpcErrorText(error), true);
     } finally {
-      sendBusy = false;
+      sendBusy = cancelSend.disabled = false;
       fields.forEach(field => { field.disabled = false; });
       updateProvinces();
     }
