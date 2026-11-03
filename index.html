@@ -297,6 +297,31 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 @media (max-width: 690px) {
   .travel-fields { grid-template-columns: minmax(0, 1fr); }
 }
+.secret-page { display: grid; gap: 16px; min-width: 0; }
+.secret-page summary { cursor: pointer; }
+.secret-send-title { display: list-item; list-style-position: inside; font-weight: 700; }
+.secret-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.secret-hint { margin: 0; }
+.secret-provinces:not(:empty) { padding-top: 8px; }
+.secret-inbox { padding: 14px 16px; }
+.secret-unlock { padding: 0; grid-template-columns: minmax(0, 260px) auto; align-items: end; justify-content: start; }
+.secret-controls, .secret-list { display: grid; gap: 10px; }
+.secret-list:not(:empty) { margin-top: 12px; }
+.secret-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.secret-toolbar select { font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 7px; background: white; color: var(--ink); }
+.secret-envelope { border: 1px solid var(--line); border-radius: 7px; }
+.secret-envelope-title { padding: 12px; overflow-wrap: anywhere; }
+.secret-badges { display: inline-flex; flex-wrap: wrap; gap: 5px; margin-inline-start: 8px; vertical-align: middle; }
+.secret-badge { border-radius: 10px; padding: 2px 8px; font-size: 12px; background: #eeece6; }
+.secret-badge.unread, .secret-badge.pending { background: #f6e8cb; color: #754d18; }
+.secret-badge.approved { background: #e6f1e9; color: #32614e; }
+.secret-badge.rejected, .secret-badge.urgent { background: #f8e6e8; color: #8b1425; }
+.secret-envelope-body { padding: 0 12px 12px; overflow-wrap: anywhere; }
+.secret-envelope-body label { display: grid; gap: 5px; margin-bottom: 8px; }
+.secret-envelope-body textarea { width: 100%; min-height: 70px; font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 7px; }
+@media (max-width: 500px) {
+  .secret-fields, .secret-unlock { grid-template-columns: minmax(0, 1fr); }
+}
 </style>
 </head>
 <body data-page="home">
@@ -312,6 +337,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
     <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h2m4 0h2"/></symbol>
     <symbol id="i-field77" viewBox="0 0 24 24"><path d="M5 3h12l3 3v15H5Zm4 6h7m-7 4h7m-7 4h5"/></symbol>
     <symbol id="i-travel" viewBox="0 0 24 24"><path d="M3 6h12a4 4 0 0 1 0 8H9a3 3 0 0 0 0 6h12m-4-4 4 4-4 4"/><circle cx="3" cy="6" r="2" fill="white"/></symbol>
+    <symbol id="i-secret" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 1 0-2 8m2-14v6h-6"/></symbol>
   </defs>
 </svg>
@@ -451,6 +477,7 @@ const SECTIONS = {
   calendar: { label: 'ตารางปฏิทิน', english: 'COMMAND CALENDAR', description: 'ดูตารางงานรายวันและเพิ่มรายการตามวันที่' },
   field77: { label: 'ภารกิจวางกำลังฟินิกซ์', english: 'PHOENIX DEPLOYMENT MISSION', description: 'ดูภารกิจแยกตามภาค จังหวัด และอำเภอหรือเขต' },
   travel: { label: 'คำนวณการเดินทางในประเทศ', english: 'DOMESTIC TRAVEL ESTIMATOR', description: 'ประมาณเวลาบินและเวลาขับรถระหว่างจังหวัด' },
+  secret: { label: 'เปิดซองลับ', english: 'SEALED REPORTS', description: 'รับรายงานลับจากเจ้าหน้าที่ประจำจังหวัดที่ผ่านการประเมิน' },
 };
 const ENTRY_FIELDS = {
   profile: [['title', 'หัวข้อข้อมูล'], ['details', 'รายละเอียด']],
@@ -731,6 +758,7 @@ function setMobileMenu(open) {
 
 function navigate(section) {
   if (section === 'field77' && currentSection !== section) areaView = { region: -1, province: '' };
+  if (section !== 'secret') secretPage = undefined;
   currentSection = section;
   setMobileMenu(false);
   render();
@@ -818,10 +846,11 @@ function render() {
   const isHome = currentSection === 'home';
   const isArea = currentSection === 'field77';
   const isTravel = currentSection === 'travel';
+  const isSecret = currentSection === 'secret';
   document.body.dataset.page = currentSection;
   byId('sidebar').hidden = isHome;
   byId('menuToggle').hidden = isHome;
-  byId('addEntry').hidden = isHome || isArea || isTravel || !data;
+  byId('addEntry').hidden = isHome || isArea || isTravel || isSecret || !data;
   byId('areaReport').hidden = !isArea || !data;
   byId('areaReport').disabled = isLoading;
   byId('areaSummary').hidden = !isArea || !areaView.province || !data;
@@ -831,6 +860,10 @@ function render() {
   for (const node of byId('navItems').children) {
     if (node.dataset.section === currentSection) node.setAttribute('aria-current', 'page');
     else node.removeAttribute('aria-current');
+  }
+  if (isSecret) {
+    renderSecretReports(target);
+    return;
   }
   if (isTravel) {
     if (target.firstElementChild !== travelPanel) {
@@ -854,6 +887,288 @@ function render() {
   }
   if (currentSection === 'calendar') renderCalendar(target);
   else renderSection(target);
+}
+
+let secretPage;
+
+function renderSecretReports(target) {
+  if (!data?.secretReportsEnabled) {
+    target.replaceChildren(element('p', 'empty', isLoading ? 'กำลังโหลดข้อมูลจังหวัด…' :
+      'เมนูนี้เปิดใช้เมื่อเชื่อมต่อ Apps Script เวอร์ชันที่รองรับซองลับ'));
+    return;
+  }
+  if (!secretPage) secretPage = createSecretPage();
+  if (target.firstElementChild !== secretPage.panel) target.replaceChildren(secretPage.panel);
+  secretPage.updateProvinces();
+}
+
+function createSecretPage() {
+  const panel = element('div', 'secret-page');
+  const outgoing = element('details', 'panel');
+  outgoing.open = true;
+  outgoing.append(element('summary', 'panel-head secret-send-title', 'ส่งรายงานจากพื้นที่'));
+  const sendForm = element('form', 'entry-form');
+  const sendFields = element('div', 'secret-fields');
+  const province = element('select');
+  const kind = element('select');
+  const priority = element('select');
+  kind.append(...['เหตุผิดปกติ', 'ปัญหาในพื้นที่', 'รายงานลับ'].map(value => new Option(value)));
+  priority.append(...['ปกติ', 'ด่วน', 'ด่วนที่สุด'].map(value => new Option(value)));
+  const reporter = element('input');
+  reporter.maxLength = 120;
+  const title = element('input');
+  title.maxLength = 200;
+  const details = element('textarea');
+  details.maxLength = 6000;
+  for (const [label, input] of [['จังหวัด', province], ['ชื่อหรือรหัสผู้รายงาน', reporter],
+    ['ประเภท', kind], ['ความเร่งด่วน', priority]]) {
+    sendFields.append(secretField(label, input));
+  }
+  const sendButton = element('button', 'primary-action', 'ส่งซองลับ');
+  const sendActions = element('div', 'entry-actions');
+  sendActions.append(sendButton);
+  const sendStatus = secretMessage();
+  const eligible = element('details');
+  const provinceHint = element('summary', 'caption');
+  const provinceList = element('div', 'secret-toolbar secret-provinces');
+  eligible.append(provinceHint, provinceList);
+  sendForm.append(sendFields, eligible, secretField('หัวข้อ', title),
+    secretField('รายละเอียดรายงาน', details), sendStatus, sendActions);
+  outgoing.append(sendForm);
+
+  const inbox = element('section', 'panel');
+  const inboxHeading = element('div', 'panel-head');
+  inboxHeading.append(element('h3', '', 'กล่องซองลับผู้บัญชาการ'));
+  const inboxBody = element('div', 'secret-inbox');
+  const gate = element('form', 'entry-form secret-unlock');
+  const pinInput = element('input');
+  pinInput.type = 'password';
+  pinInput.inputMode = 'numeric';
+  pinInput.pattern = '[0-9]{4}';
+  pinInput.maxLength = 4;
+  pinInput.autocomplete = 'off';
+  const unlock = element('button', 'primary-action', 'ปลดล็อกกล่องซองลับ');
+  gate.append(secretField('รหัสยืนยัน', pinInput), unlock);
+  const inboxStatus = secretMessage();
+  const controls = element('div', 'secret-controls');
+  const list = element('div', 'secret-list');
+  const filter = element('select');
+  filter.setAttribute('aria-label', 'กรองสถานะซองลับ');
+  filter.append(...[
+    ['all', 'ทุกสถานะ'], ['new', 'ยังไม่อ่าน'], ['pending', 'รอพิจารณา'],
+    ['อนุมัติ', 'อนุมัติแล้ว'], ['ปฏิเสธ', 'ปฏิเสธแล้ว'],
+  ].map(([value, name]) => new Option(name, value)));
+  const counts = element('p', 'caption secret-hint');
+  const toolbar = element('div', 'secret-toolbar');
+  const reload = button('secondary-action', 'อัปเดตกล่อง', () => loadInbox(pin));
+  const close = button('secondary-action', 'ล็อกกล่อง', lockInbox);
+  toolbar.append(filter, reload, close);
+  controls.append(counts, toolbar);
+  inboxBody.append(gate, inboxStatus, controls, list);
+  inbox.append(inboxHeading, inboxBody);
+  panel.append(outgoing, inbox);
+
+  let pin = '';
+  let reports = [];
+  let inboxBusy = false;
+  let sendBusy = false;
+  let submissionId = '';
+  let openId = '';
+
+  function updateProvinces() {
+    const previous = province.value;
+    const passed = Object.keys(AREAS).filter(code => areaResult(code) === 'ผ่าน')
+      .sort((a, b) => AREAS[a].name.localeCompare(AREAS[b].name, 'th'));
+    province.replaceChildren(new Option('เลือกจังหวัดที่ผ่านการประเมิน', ''),
+      ...passed.map(code => new Option(AREAS[code].name, code)));
+    if (passed.includes(previous)) province.value = previous;
+    sendButton.disabled = sendBusy || !passed.length;
+    provinceHint.textContent = passed.length ? 'ดูรายชื่อ ' + passed.length + ' จังหวัดที่ส่งรายงานได้' :
+      'ยังไม่มีจังหวัดที่ผ่านการประเมิน';
+    provinceList.replaceChildren(...passed.map(code => {
+      const item = button('secondary-action', AREAS[code].name, () => {
+        if (sendBusy) return;
+        province.value = code;
+        submissionId = '';
+        reporter.focus();
+      });
+      item.disabled = sendBusy;
+      return item;
+    }));
+  }
+
+  sendForm.addEventListener('input', () => { submissionId = ''; });
+  sendForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (sendBusy) return;
+    const id = submissionId ||= randomPhoenixId();
+    sendBusy = sendButton.disabled = true;
+    const request = {
+      action: 'send', id, province: province.value, reporter: reporter.value,
+      kind: kind.value, priority: priority.value, title: title.value, details: details.value,
+    };
+    const fields = [province, reporter, kind, priority, title, details];
+    fields.forEach(field => { field.disabled = true; });
+    setSecretMessage(sendStatus, 'กำลังส่งซองลับ…');
+    try {
+      const result = await phoenixRequest('phoenixSecretReports', request);
+      if (!result?.received) throw new Error('ไม่ได้รับการยืนยันการส่งซอง');
+      sendForm.reset();
+      submissionId = '';
+      setSecretMessage(sendStatus, 'ส่งซองแล้ว · รอการพิจารณา · เลขอ้างอิง ' + id.slice(0, 8).toUpperCase());
+      if (pin && panel.isConnected) loadInbox(pin);
+    } catch (error) {
+      setSecretMessage(sendStatus, rpcErrorText(error), true);
+    } finally {
+      sendBusy = false;
+      fields.forEach(field => { field.disabled = false; });
+      updateProvinces();
+    }
+  });
+
+  gate.addEventListener('submit', event => {
+    event.preventDefault();
+    if (inboxBusy) return;
+    const entered = pinInput.value;
+    pinInput.value = '';
+    loadInbox(entered);
+  });
+  filter.addEventListener('change', () => renderInbox());
+
+  function lockInbox() {
+    if (inboxBusy) return;
+    pin = openId = '';
+    reports = [];
+    filter.value = 'all';
+    setSecretMessage(inboxStatus, '');
+    renderInbox();
+    pinInput.focus();
+  }
+
+  async function loadInbox(entered) {
+    if (inboxBusy) return;
+    inboxBusy = unlock.disabled = reload.disabled = close.disabled = true;
+    setSecretMessage(inboxStatus, 'กำลังโหลดซองลับ…');
+    try {
+      const result = await phoenixRequest('phoenixSecretReports', { action: 'list', pin: entered });
+      if (!Array.isArray(result)) throw new Error('โหลดรายการซองลับไม่สำเร็จ');
+      if (!panel.isConnected) return;
+      pin = entered;
+      reports = result;
+      setSecretMessage(inboxStatus, '');
+      renderInbox();
+    } catch (error) {
+      setSecretMessage(inboxStatus, rpcErrorText(error), true);
+    } finally {
+      inboxBusy = unlock.disabled = reload.disabled = close.disabled = false;
+    }
+  }
+
+  async function changeReport(report, action, decision, note) {
+    if (inboxBusy) return;
+    inboxBusy = reload.disabled = close.disabled = true;
+    setSecretMessage(inboxStatus, 'กำลังบันทึก…');
+    try {
+      const result = await phoenixRequest('phoenixSecretReports', { action, id: report.id, pin, decision, note });
+      if (result?.id !== report.id) throw new Error('ไม่ได้รับผลการบันทึกซองลับ');
+      if (!panel.isConnected) return;
+      reports = reports.map(item => item.id === result.id ? result : item);
+      if (filter.value !== 'all' && !matches(result)) filter.value = 'all';
+      setSecretMessage(inboxStatus, decision ? 'บันทึกผลพิจารณาแล้ว · ' + decision : 'บันทึกว่าอ่านแล้ว');
+      renderInbox();
+    } catch (error) {
+      setSecretMessage(inboxStatus, rpcErrorText(error), true);
+    } finally {
+      inboxBusy = reload.disabled = close.disabled = false;
+    }
+  }
+
+  function matches(report) {
+    if (filter.value === 'all') return true;
+    if (filter.value === 'new') return !report.readDate;
+    if (filter.value === 'pending') return !report.decision;
+    return filter.value === report.decision;
+  }
+
+  function renderInbox() {
+    gate.hidden = Boolean(pin);
+    controls.hidden = !pin;
+    list.replaceChildren();
+    if (!pin) return;
+    const unread = reports.filter(report => !report.readDate).length;
+    const pending = reports.filter(report => !report.decision).length;
+    counts.textContent = 'ทั้งหมด ' + reports.length + ' · ยังไม่อ่าน ' + unread + ' · รอพิจารณา ' + pending;
+    const visible = reports.filter(matches);
+    if (!visible.length) list.append(element('p', 'empty', 'ไม่มีซองลับในสถานะนี้'));
+    for (const report of visible) {
+      const envelope = element('details', 'secret-envelope');
+      envelope.open = report.id === openId;
+      envelope.addEventListener('toggle', () => {
+        if (envelope.open) openId = report.id;
+        else if (openId === report.id) openId = '';
+      });
+      const header = element('summary', 'secret-envelope-title');
+      const labels = element('span', 'secret-badges');
+      const status = report.decision || (report.readDate ? 'รอพิจารณา' : 'ยังไม่อ่าน');
+      const tint = report.decision === 'อนุมัติ' ? 'approved' : report.decision === 'ปฏิเสธ' ? 'rejected' :
+        report.readDate ? 'pending' : 'unread';
+      labels.append(element('span', 'secret-badge ' + tint, status));
+      if (report.priority !== 'ปกติ') labels.append(element('span', 'secret-badge urgent', report.priority));
+      header.append(element('strong', '', report.title), labels);
+
+      const body = element('div', 'secret-envelope-body');
+      const provinceName = AREAS[report.province]?.name || report.province;
+      body.append(element('p', 'caption', [provinceName, report.kind, 'รับ ' + formatDate(report.date, true),
+        'ซอง ' + report.id.slice(0, 8).toUpperCase()].join(' · ')),
+        element('p', 'caption', 'ผู้รายงาน ' + report.reporter),
+        element('p', 'detail', report.details));
+      if (report.readDate) body.append(element('p', 'caption', 'อ่านแล้ว ' + formatDate(report.readDate, true)));
+      if (report.decision) {
+        body.append(element('p', 'caption', report.decision + 'เมื่อ ' + formatDate(report.decisionDate, true)));
+        if (report.note) body.append(element('p', 'detail', report.note));
+      } else if (report.readDate) {
+        const note = element('textarea');
+        note.maxLength = 1500;
+        const label = secretField('หมายเหตุประกอบผลพิจารณา (ไม่บังคับ)', note);
+        note.required = false;
+        const actions = element('div', 'secret-toolbar');
+        for (const decision of ['อนุมัติ', 'ปฏิเสธ']) {
+          actions.append(button(decision === 'อนุมัติ' ? 'primary-action' : 'secondary-action delete-action', decision, () => {
+            if (inboxBusy || !window.confirm('ยืนยัน' + decision + 'ซองนี้หรือไม่?')) return;
+            changeReport(report, 'decide', decision, note.value);
+          }));
+        }
+        body.append(label, actions);
+      } else {
+        body.append(button('secondary-action', 'อ่านแล้ว', () => changeReport(report, 'read')));
+      }
+      envelope.append(header, body);
+      list.append(envelope);
+    }
+  }
+
+  renderInbox();
+  return { panel, updateProvinces };
+}
+
+function secretField(labelText, input) {
+  const label = element('label', '', labelText);
+  input.required = true;
+  label.append(input);
+  return label;
+}
+
+function secretMessage() {
+  const message = element('p', 'notice');
+  message.setAttribute('role', 'status');
+  message.hidden = true;
+  return message;
+}
+
+function setSecretMessage(message, text, error = false) {
+  message.textContent = text;
+  message.classList.toggle('error', error);
+  message.hidden = !text;
 }
 
 // จุดอ้างอิงในตัวเมือง: https://www.sothailand.com/pscodgis/JsonData.aspx?fn=provincedata
