@@ -160,8 +160,8 @@ dialog::backdrop { background: #101c27ad; }
 .area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .area-card.report-complete { border: 2px solid #348259; }
 .area-card.report-partial { border: 2px solid #bd414c; }
-.report-complete .report-state { color: #256442; }
-.report-partial .report-state { color: #9a2733; }
+.area-result-pass { color: #256442; }
+.area-result-fail { color: #9a2733; }
 .report-checklist { max-height: 280px; overflow: auto; margin: 0; border: 1px solid var(--line); border-radius: 6px; }
 .report-checklist label { display: flex; align-items: center; gap: 8px; padding: 4px; font-weight: 400; }
 .report-checklist input[type="checkbox"] { width: auto; margin: 0; }
@@ -865,9 +865,13 @@ function areaCounts(entries) {
 }
 
 function changeArea(region, province = '', district = '') {
+  if (province) {
+    region = REGIONS.findIndex(([, codes]) => codes.includes(province));
+    if (region < 0 || (district && !Object.hasOwn(AREAS[province].districts, district))) return;
+  }
   areaView = { region, province, district };
   render();
-  byId('areaHeading').focus();
+  byId('areaHeading')?.focus();
 }
 
 function renderAreas(target) {
@@ -875,17 +879,6 @@ function renderAreas(target) {
   const area = AREAS[province];
   const word = districtWord(province);
   const entries = data?.field77 || [];
-  const byProvince = new Map();
-  for (const entry of entries) {
-    if (!byProvince.has(entry.province)) byProvince.set(entry.province, []);
-    byProvince.get(entry.province).push(entry);
-  }
-  const provincialEntries = byProvince.get(province) || [];
-  const byDistrict = new Map();
-  for (const entry of provincialEntries) {
-    if (!byDistrict.has(entry.district)) byDistrict.set(entry.district, []);
-    byDistrict.get(entry.district).push(entry);
-  }
   const crumb = element('nav', 'area-crumb');
   crumb.setAttribute('aria-label', 'ตำแหน่งในภารกิจ 77');
   crumb.append(button('secondary-action', 'ทุกภาค', () => changeArea(-1)));
@@ -901,46 +894,59 @@ function renderAreas(target) {
   target.append(heading);
 
   const grid = element('div', 'area-grid');
-  function appendChoice(label, detail, action, status) {
+  function appendChoice(label, action, detail = '', provinceCode = '') {
     const control = button('area-card', undefined, action);
-    control.append(element('strong', '', label), element('span', 'caption', detail));
-    if (status) {
-      control.classList.add(status.className);
-      control.append(element('span', 'caption report-state', status.label));
+    control.append(element('strong', '', label));
+    if (provinceCode) {
+      const status = areaReportStatus(provinceCode);
+      if (status) {
+        control.classList.add(status.className);
+        control.title = status.label;
+      }
     }
+    if (detail) control.append(element('span', 'caption ' + areaResultClass(detail), detail));
     grid.append(control);
   }
   if (region < 0) {
-    REGIONS.forEach(([name, codes], index) => appendChoice(name, codes.length + ' จังหวัด', () => changeArea(index)));
+    REGIONS.forEach(([name, codes], index) => appendChoice(name, () => changeArea(index), codes.length + ' จังหวัด'));
   } else if (!province) {
     REGIONS[region][1].forEach(code => {
-      const item = AREAS[code];
-      const count = byProvince.get(code)?.length || 0;
-      const detail = Object.keys(item.districts).length + ' ' + districtWord(code) +
-        (data ? ' · ' + count + ' รายการ' : '');
-      appendChoice(item.name, detail, () => changeArea(region, code), areaReportStatus(code));
+      appendChoice(AREAS[code].name, () => changeArea(region, code), areaResult(code), code);
     });
   } else if (!district) {
     Object.keys(area.districts).forEach(code => {
-      const count = byDistrict.get(code)?.length || 0;
-      appendChoice(districtLabel(province, code), data ? count + ' รายการ' : 'เปิดรายการ',
-        () => changeArea(region, province, code));
+      appendChoice(districtLabel(province, code), () => changeArea(region, province, code), areaResult(province, code));
     });
   }
   if (grid.childElementCount) target.append(grid);
 
   if (province) {
     const panel = element('section', 'panel area-records');
-    const scoped = (byDistrict.get(district) || []).slice().reverse().sort(latestFirst);
+    const scoped = entries.filter(entry => entry.province === province && entry.district === district)
+      .reverse().sort(latestFirst);
     panel.append(element('h3', 'panel-head', district ? 'รายการเดินทางประจำ' + word : 'รายการเดินทางระดับจังหวัด'));
     if (data) {
-      panel.append(element('div', 'list-head', scoped.length + ' รายการ'));
+      const result = areaResult(province, district);
+      if (result) panel.append(element('div', 'list-head ' + areaResultClass(result), result));
       appendEntries(panel, 'field77', scoped, 'ยังไม่มีบันทึกในพื้นที่นี้');
     } else {
       panel.append(element('p', 'empty', 'รายการจะแสดงเมื่อเชื่อมต่อข้อมูลแล้ว'));
     }
     target.append(panel);
   }
+}
+
+function areaResult(province, district = '') {
+  const report = data?.areaReports?.[province];
+  if (!district) return report?.result || '';
+  if (!Array.isArray(report?.districts)) return '';
+  return report.districts.includes(district) ? 'ผ่าน' : 'ไม่ผ่าน';
+}
+
+function areaResultClass(result) {
+  if (result === 'ผ่าน') return 'area-result-pass';
+  if (result === 'ไม่ผ่าน') return 'area-result-fail';
+  return '';
 }
 
 function areaReportStatus(province) {
