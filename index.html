@@ -362,7 +362,8 @@ const ENTRY_FIELDS = {
   field77: [['date', 'วันที่เดินทาง'], ['title', 'หัวข้อการเดินทาง'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
 };
 const CALENDAR_ADD_FIELDS = [
-  ['date', 'วันที่'], ['category', 'ประเภทตารางงาน'], ['details', 'รายละเอียด (ไม่บังคับ)'],
+  ['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'],
+  ['category', 'ประเภทตารางงาน'], ['details', 'รายละเอียด (ไม่บังคับ)'],
 ];
 const STATUS_OPTIONS = {
   field77: ['ยังไม่เริ่ม', 'กำลังดำเนินการ', 'เสร็จสิ้น', 'ยกเลิก'],
@@ -726,7 +727,7 @@ function render() {
   document.body.dataset.page = currentSection;
   byId('sidebar').hidden = isHome;
   byId('menuToggle').hidden = isHome;
-  byId('addEntry').hidden = isHome || !data || (isArea && !areaView.province);
+  byId('addEntry').hidden = isHome || isArea || !data;
   byId('areaReport').hidden = !isArea || !data;
   byId('areaReport').disabled = isLoading;
   byId('areaSummary').hidden = !isArea || !areaView.province || !data;
@@ -1389,7 +1390,7 @@ function rpcErrorText(error) {
 
 function openEntryForm(key = currentSection, existing = null) {
   if (isLoading || !data || !ENTRY_FIELDS[key]) return;
-  if (key === 'field77' && !existing && !areaView.province) return;
+  if (key === 'field77' && !existing) return;
   const addingCalendar = key === 'calendar' && !existing;
   const formFields = addingCalendar ? CALENDAR_ADD_FIELDS : ENTRY_FIELDS[key];
   entryRequest = existing ? { section: key, id: existing.id, row: existing.row, previous: { ...existing } }
@@ -1397,7 +1398,7 @@ function openEntryForm(key = currentSection, existing = null) {
   byId('entryTitle').textContent = existing ? 'แก้ไขข้อมูล · ' + entryDisplayTitle(key, existing) : 'เพิ่มข้อมูล · ' + SECTIONS[key].label;
   const fields = byId('entryFields');
   fields.replaceChildren();
-  if (key === 'field77') appendAreaFields(fields, existing || areaView);
+  if (key === 'field77') appendAreaFields(fields, existing);
   for (const [field, title] of formFields) {
     const label = element('label', '', title);
     const choices = field === 'category'
@@ -1440,7 +1441,7 @@ function openEntryForm(key = currentSection, existing = null) {
     }
   }
 
-  if (key === 'calendar' && !addingCalendar) {
+  if (key === 'calendar') {
     const start = fields.querySelector('[name="date"]');
     const end = fields.querySelector('[name="endDate"]');
     const syncMinimum = () => { end.min = start.value; };
