@@ -102,30 +102,26 @@ h3 { font-size: 17px; margin: 4px 0 0; }
   flex: 0 0 calc((100% - (var(--office-columns, 5) - 1) * var(--office-gap)) / var(--office-columns, 5));
   min-width: 0;
 }
-#officeLayoutDialog { width: min(690px, calc(100% - 28px)); }
+.office-layout-tools { display: grid; gap: 8px; padding: 0 16px 16px; }
 .office-layout-help { margin: 0; line-height: 1.5; }
-.office-layout-rows { display: grid; gap: 8px; }
-.office-layout-row { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
-.office-layout-row-head { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
-.office-layout-row-head label { width: 94px; }
-.office-layout-row-head strong { align-self: center; margin-inline-end: auto; }
-.office-layout-track { display: flex; align-items: stretch; overflow-x: auto; margin-top: 10px; padding: 3px; }
-.office-layout-card {
-  flex: 0 0 clamp(78px, 15%, 108px); min-width: 0; min-height: 62px; padding: 6px;
-  text-align: start; font-size: 12px; overflow-wrap: anywhere; cursor: grab;
-}
-.office-layout-card[aria-pressed="true"] { background: #e7f1f8; border-color: #496b82; }
+.office-layout-rows { display: grid; gap: 6px; margin-top: 8px; }
+.office-layout-row-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.office-layout-row-head input { width: 65px; padding: 4px; font: inherit; }
+.office-layout-edit .office-card-row { position: relative; }
+.office-layout-edit .office-card { cursor: grab; }
+.office-layout-edit .office-card[aria-pressed="true"] { background: #e7f1f8; border-color: #496b82; }
 .office-layout-slot {
-  flex: 0 0 24px; min-height: 38px; padding: 0;
-  border: 1px dashed transparent; border-radius: 5px; background: transparent; color: #34556e;
+  position: absolute; z-index: 1; top: 50%;
+  left: calc(50% + var(--office-slot-offset) * ((100% + var(--office-gap)) / var(--office-columns)));
+  transform: translate(-50%, -50%); width: 28px; min-height: 42px; padding: 0;
+  border: 1px dashed #7592a7; border-radius: 5px; background: #f0f6fb; color: #34556e;
 }
-.office-layout-slot:disabled { opacity: 0; }
-.office-layout-slot:not(:disabled) { border-color: #7592a7; background: #f0f6fb; }
+.office-layout-slot:disabled { visibility: hidden; }
 .office-layout-slot:not(:disabled):hover, .office-layout-slot.drop-active { background: #dbeaf6; border-color: #34556e; }
-.office-layout-slot.empty { flex: 1 0 auto; border-color: var(--line); }
-.office-layout-slot.empty:disabled { opacity: 1; color: var(--muted); }
+.office-layout-slot.empty { position: static; transform: none; width: 100%; }
+.office-layout-slot.empty:disabled { visibility: visible; background: transparent; color: var(--muted); }
 @media (pointer: coarse) {
-  .office-layout-slot { flex-basis: 36px; }
+  .office-layout-slot:not(.empty) { width: 34px; }
 }
 .office-card { display: grid; align-content: start; gap: 6px; min-height: 88px; overflow-wrap: anywhere; }
 .office-card.commander { border-color: #b88b55; }
@@ -472,19 +468,6 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
     </div>
   </form>
 </dialog>
-<dialog id="officeLayoutDialog" aria-labelledby="officeLayoutTitle">
-  <div class="dialog-head"><h2 id="officeLayoutTitle">จัดผังข้อมูลสำนัก</h2></div>
-  <form id="officeLayoutForm" class="entry-form">
-    <p id="officeLayoutHelp" class="caption office-layout-help" role="status">ลากการ์ดไปที่ช่อง + หรือกดการ์ดหนึ่งครั้งแล้วกด + ตรงตำแหน่งที่จะวาง</p>
-    <div id="officeLayoutRows" class="office-layout-rows"></div>
-    <button id="officeLayoutAdd" class="secondary-action" type="button">+ เพิ่มแถว</button>
-    <p id="officeLayoutError" class="notice error" role="alert" hidden></p>
-    <div class="entry-actions">
-      <button id="officeLayoutCancel" type="button" class="secondary-action">ยกเลิก</button>
-      <button id="officeLayoutSave" type="submit" class="primary-action">บันทึกผัง</button>
-    </div>
-  </form>
-</dialog>
 <dialog id="entryDialog" aria-labelledby="entryTitle">
   <div class="dialog-head">
     <div><div class="kicker">NEW ENTRY</div><h2 id="entryTitle"></h2></div>
@@ -824,6 +807,7 @@ function setMobileMenu(open) {
 }
 
 function navigate(section) {
+  if (isSaving && byId('officeLayoutForm')) return;
   if (section === 'field77' && currentSection !== section) areaView = { region: -1, province: '' };
   if (section !== 'secret') secretPage = undefined;
   currentSection = section;
@@ -857,7 +841,7 @@ function connection(state, label) {
 
 function refresh() {
   if (isLoading || isSaving || byId('entryDialog').open || byId('reportDialog').open ||
-      byId('calendarDeleteDialog').open || byId('officeLayoutDialog').open ||
+      byId('calendarDeleteDialog').open || byId('officeLayoutForm') ||
       byId('simulationDialog').open || byId('secretSendDialog')?.open) return;
   if (isPreview) {
     if (!data) {
@@ -2022,90 +2006,104 @@ function officeLayoutRows(cards) {
   return rows;
 }
 
-function renderSection(target) {
-  const panel = element('section', 'panel');
-  const heading = element('div', 'panel-head');
-  heading.append(element('strong', '', 'โครงสร้างสำนัก'),
-    button('secondary-action', 'จัดผัง', openOfficeLayout));
-  panel.append(heading);
-  const frame = element('div', 'office-structure');
-  const grid = element('div', 'office-grid');
+function renderOfficeGrid(grid, cards, rows, wireRow) {
   const legacy = data.profile.filter(entry => !entry.officePosition);
   const legacyName = legacy.find(entry => /^ชื่อ[–— -]+นามสกุล$/.test(entry.title))?.details;
-
-  function appendPerson(position, entry, row) {
-    const commander = position === 'commander';
-    const card = button('area-card office-card' + (commander ? ' commander' : ''), undefined, () => {
-      if (entry) showDetail('profile', entry);
-      else if (commander && legacy.length) showOfficeCommander();
-      else openEntryForm('profile', null, position);
-    });
-    card.append(element('strong', '', OFFICE_POSITIONS[position]),
-      element('span', 'caption', entry?.title || (commander && legacyName) || 'ยังไม่ได้เพิ่มข้อมูล'));
-    if (entry?.details?.trim()) card.append(element('span', 'caption detail', entry.details));
-    row.append(card);
-  }
-
-  const cards = officeCardEntries();
-  const rows = officeLayoutRows(cards).filter(row => row.cards.length);
-  grid.style.setProperty('--office-max-columns', Math.max(OFFICE_DEFAULT_LIMIT, ...rows.map(row => row.limit)));
-  for (const config of rows) {
+  const visibleRows = wireRow ? rows : rows.filter(row => row.cards.length);
+  grid.style.setProperty('--office-max-columns', Math.max(OFFICE_DEFAULT_LIMIT, ...visibleRows.map(row => row.limit)));
+  grid.replaceChildren(...visibleRows.map((config, index) => {
     const row = element('div', 'office-card-row');
     row.style.setProperty('--office-columns', Math.max(OFFICE_DEFAULT_LIMIT, config.limit));
     for (const key of config.cards) {
       const { position, entry } = cards.get(key);
-      appendPerson(position, entry, row);
+      const commander = position === 'commander';
+      const card = button('area-card office-card' + (commander ? ' commander' : ''), undefined, () => {
+        if (wireRow) return;
+        if (entry) showDetail('profile', entry);
+        else if (commander && legacy.length) showOfficeCommander();
+        else openEntryForm('profile', null, position);
+      });
+      card.append(element('strong', '', OFFICE_POSITIONS[position]),
+        element('span', 'caption', entry?.title || (commander && legacyName) || 'ยังไม่ได้เพิ่มข้อมูล'));
+      if (entry?.details?.trim()) card.append(element('span', 'caption detail', entry.details));
+      row.append(card);
     }
-    grid.append(row);
-  }
+    wireRow?.(row, config, index);
+    return row;
+  }));
+}
+
+function renderSection(target) {
+  const panel = element('section', 'panel');
+  const heading = element('div', 'panel-head');
+  const frame = element('div', 'office-structure');
+  const grid = element('div', 'office-grid');
+  const cards = officeCardEntries();
+  heading.append(element('strong', '', 'โครงสร้างสำนัก'),
+    button('secondary-action', 'จัดผัง', () => openOfficeLayout(panel, heading, frame, grid, cards)));
+  renderOfficeGrid(grid, cards, officeLayoutRows(cards));
   frame.append(grid);
-  panel.append(frame);
+  panel.append(heading, frame);
   target.append(panel);
 }
 
-function openOfficeLayout() {
-  if (isLoading || isSaving || !data) return;
-  const dialog = byId('officeLayoutDialog');
-  const form = byId('officeLayoutForm');
-  const list = byId('officeLayoutRows');
-  const help = byId('officeLayoutHelp');
-  const add = byId('officeLayoutAdd');
-  const save = byId('officeLayoutSave');
-  const cancel = byId('officeLayoutCancel');
-  const error = byId('officeLayoutError');
-  const cards = officeCardEntries();
+function openOfficeLayout(panel, heading, frame, grid, cards) {
+  if (isLoading || isSaving || byId('officeLayoutForm')) return;
   const rows = officeLayoutRows(cards);
   const previousRevision = data.officeLayout?.revision || '';
-
-  const cardLabel = key => {
-    const { position, entry } = cards.get(key);
-    return entry ? OFFICE_POSITIONS[position] + ' · ' + entry.title : OFFICE_POSITIONS[position];
-  };
-  const setError = message => {
-    error.textContent = message;
-    error.hidden = !message;
-  };
+  const form = element('form', 'office-layout-edit');
+  form.id = 'officeLayoutForm';
+  const tools = element('div', 'office-layout-tools');
+  const help = element('p', 'caption office-layout-help');
+  help.setAttribute('role', 'status');
+  const error = element('p', 'notice error');
+  error.setAttribute('role', 'alert');
+  error.hidden = true;
+  const rowSettings = element('details');
+  const list = element('div', 'office-layout-rows');
+  rowSettings.append(element('summary', '', 'ตั้งค่าจำนวนคนและลำดับแถว'), list);
+  const add = button('secondary-action', '+ เพิ่มแถว', () => {
+    if (isSaving) return;
+    rows.push({ limit: OFFICE_DEFAULT_LIMIT, cards: [] });
+    renderDraft();
+    grid.lastElementChild?.scrollIntoView({ block: 'nearest' });
+  });
+  const cancel = button('secondary-action', 'ยกเลิก', () => {
+    if (!isSaving) render();
+  });
+  const save = element('button', 'primary-action', 'บันทึกผัง');
+  save.type = 'submit';
+  save.setAttribute('form', form.id);
+  const actions = element('div', 'section-actions');
+  actions.append(cancel, save);
+  heading.replaceChildren(element('strong', '', 'โครงสร้างสำนัก'), actions);
+  tools.append(help, add, rowSettings, error);
+  form.append(frame, tools);
+  panel.append(form);
+  byId('addEntry').hidden = true;
 
   let selectedKey = '';
   let draggedKey = '';
   const cardButtons = new Map();
   const slots = [];
-  const instructions = 'ลากการ์ดไปที่ช่อง + หรือกดการ์ดหนึ่งครั้งแล้วกด + ตรงตำแหน่งที่จะวาง';
-
+  const setError = message => {
+    error.textContent = message;
+    error.hidden = !message;
+  };
   function canPlace(row, key) {
     return Boolean(key) && (row.cards.includes(key) || row.cards.length < row.limit);
   }
-
   function updateTargets() {
     const key = draggedKey || selectedKey;
-    help.textContent = key ? 'กำลังย้าย ' + cardLabel(key) + ' · เลือกช่อง + เพื่อวาง' : instructions;
-    cardButtons.forEach((control, card) => control.setAttribute('aria-pressed', String(card === key)));
+    const card = key && cards.get(key);
+    help.textContent = card ? 'กำลังย้าย ' + (card.entry?.title || OFFICE_POSITIONS[card.position]) + ' · เลือกช่อง + เพื่อวาง'
+      : 'ลากการ์ดบนผังได้เลย หรือแตะการ์ดแล้วแตะ + เพื่อวาง';
+    cardButtons.forEach((control, cardKey) => control.setAttribute('aria-pressed', String(cardKey === key)));
     slots.forEach(({ control, row }) => {
       control.disabled = !canPlace(row, key);
       control.classList.remove('drop-active');
     });
   }
-
   function placeCard(key, row, index) {
     if (isSaving || !canPlace(row, key)) return;
     const source = rows.find(item => item.cards.includes(key));
@@ -2118,16 +2116,71 @@ function openOfficeLayout() {
     renderDraft();
     cardButtons.get(key)?.focus({ preventScroll: true });
   }
-
+  function wireRow(track, row, rowIndex) {
+    const targets = [];
+    function setDropTarget(node, getIndex) {
+      node.addEventListener('dragover', event => {
+        if (!canPlace(row, draggedKey)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        const dropIndex = getIndex(event);
+        targets.forEach((target, index) => target.classList.toggle('drop-active', index === dropIndex));
+      });
+      node.addEventListener('dragleave', () => targets.forEach(target => target.classList.remove('drop-active')));
+      node.addEventListener('drop', event => {
+        if (!canPlace(row, draggedKey)) return;
+        event.preventDefault();
+        placeCard(draggedKey, row, getIndex(event));
+      });
+    }
+    [...track.children].forEach((card, index) => {
+      const key = row.cards[index];
+      card.draggable = true;
+      card.addEventListener('click', () => {
+        selectedKey = selectedKey === key ? '' : key;
+        updateTargets();
+      });
+      card.addEventListener('dragstart', event => {
+        if (isSaving || !event.dataTransfer) {
+          event.preventDefault();
+          return;
+        }
+        draggedKey = key;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', key);
+        updateTargets();
+      });
+      card.addEventListener('dragend', () => {
+        draggedKey = '';
+        updateTargets();
+      });
+      setDropTarget(card, event => {
+        const rect = card.getBoundingClientRect();
+        return event.clientX < rect.left + rect.width / 2 ? index : index + 1;
+      });
+      cardButtons.set(key, card);
+    });
+    for (let index = 0; index <= row.cards.length; index += 1) {
+      const empty = !row.cards.length;
+      const slot = button('office-layout-slot' + (empty ? ' empty' : ''), empty ? '+ วางในแถวนี้' : '+',
+        () => placeCard(selectedKey, row, index));
+      slot.style.setProperty('--office-slot-offset', index - row.cards.length / 2);
+      slot.setAttribute('aria-label', 'วางที่แถว ' + (rowIndex + 1) + ' ตำแหน่ง ' + (index + 1));
+      setDropTarget(slot, () => index);
+      targets.push(slot);
+      slots.push({ control: slot, row });
+      track.append(slot);
+    }
+  }
   function renderDraft() {
     cardButtons.clear();
     slots.length = 0;
+    renderOfficeGrid(grid, cards, rows, wireRow);
     add.disabled = rows.length >= OFFICE_MAX_ROWS;
     list.replaceChildren(...rows.map((row, i) => {
-      const block = element('section', 'office-layout-row');
-      const head = element('div', 'office-layout-row-head');
-      const heading = element('strong', '', 'แถว ' + (i + 1) + ' · ' + row.cards.length + '/' + row.limit + ' คน');
-      const label = element('label', '', 'จำนวนสูงสุด');
+      const controls = element('div', 'office-layout-row-head');
+      const title = element('strong', '', 'แถว ' + (i + 1) + ' · ' + row.cards.length + '/' + row.limit + ' คน');
+      const label = element('label', '', 'จำนวนสูงสุด ');
       const limit = element('input');
       limit.type = 'number';
       limit.min = Math.max(1, row.cards.length);
@@ -2142,12 +2195,13 @@ function openOfficeLayout() {
           return;
         }
         row.limit = count;
-        heading.textContent = 'แถว ' + (i + 1) + ' · ' + row.cards.length + '/' + row.limit + ' คน';
+        title.textContent = 'แถว ' + (i + 1) + ' · ' + row.cards.length + '/' + row.limit + ' คน';
+        grid.children[i].style.setProperty('--office-columns', Math.max(OFFICE_DEFAULT_LIMIT, count));
+        grid.style.setProperty('--office-max-columns', Math.max(OFFICE_DEFAULT_LIMIT, ...rows.map(row => row.limit)));
         setError('');
         updateTargets();
       };
       label.append(limit);
-
       const moveRow = (label, offset) => {
         const action = button('secondary-action', label, () => {
           const next = i + offset;
@@ -2158,73 +2212,21 @@ function openOfficeLayout() {
         action.setAttribute('aria-label', label + ' แถว ' + (i + 1));
         return action;
       };
-      head.append(heading, label, moveRow('ขึ้น', -1), moveRow('ลง', 1));
-      if (!row.cards.length && rows.length > 1) head.append(button('secondary-action', 'ลบแถวว่าง', () => {
+      controls.append(title, label, moveRow('ขึ้น', -1), moveRow('ลง', 1));
+      if (!row.cards.length && rows.length > 1) controls.append(button('secondary-action', 'ลบแถวว่าง', () => {
         rows.splice(i, 1);
         renderDraft();
       }));
-
-      const track = element('div', 'office-layout-track');
-      function appendSlot(index) {
-        const empty = !row.cards.length;
-        const slot = button('office-layout-slot' + (empty ? ' empty' : ''), empty ? '+ วางในแถวนี้' : '+',
-          () => placeCard(selectedKey, row, index));
-        slot.setAttribute('aria-label', 'วางที่แถว ' + (i + 1) + ' ตำแหน่ง ' + (index + 1));
-        slot.addEventListener('dragover', event => {
-          if (!canPlace(row, draggedKey)) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = 'move';
-          slot.classList.add('drop-active');
-        });
-        slot.addEventListener('dragleave', () => slot.classList.remove('drop-active'));
-        slot.addEventListener('drop', event => {
-          if (!canPlace(row, draggedKey)) return;
-          event.preventDefault();
-          placeCard(draggedKey, row, index);
-        });
-        slots.push({ control: slot, row });
-        track.append(slot);
-      }
-      row.cards.forEach((key, index) => {
-        appendSlot(index);
-        const { position, entry } = cards.get(key);
-        const card = button('area-card office-layout-card', undefined, () => {
-          selectedKey = selectedKey === key ? '' : key;
-          updateTargets();
-        });
-        card.append(element('strong', '', OFFICE_POSITIONS[position]));
-        if (entry) card.append(element('span', '', entry.title));
-        card.draggable = true;
-        card.addEventListener('dragstart', event => {
-          if (isSaving || !event.dataTransfer) {
-            event.preventDefault();
-            return;
-          }
-          draggedKey = key;
-          event.dataTransfer.effectAllowed = 'move';
-          event.dataTransfer.setData('text/plain', key);
-          updateTargets();
-        });
-        card.addEventListener('dragend', () => {
-          draggedKey = '';
-          updateTargets();
-        });
-        cardButtons.set(key, card);
-        track.append(card);
-      });
-      appendSlot(row.cards.length);
-      block.append(head, track);
-      return block;
+      return controls;
     }));
     updateTargets();
   }
 
-  add.onclick = () => {
-    rows.push({ limit: OFFICE_DEFAULT_LIMIT, cards: [] });
-    renderDraft();
-    list.lastElementChild?.scrollIntoView({ block: 'nearest' });
-  };
-  cancel.onclick = () => dialog.close();
+  panel.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || isSaving) return;
+    event.preventDefault();
+    render();
+  });
   form.onsubmit = async event => {
     event.preventDefault();
     if (isSaving) return;
@@ -2232,7 +2234,7 @@ function openOfficeLayout() {
       setError('กรุณาเผยแพร่ Code.gs เวอร์ชันใหม่ แล้วกดอัปเดตหน้าเว็บ');
       return;
     }
-    const controls = [...form.elements].filter(control => !control.disabled);
+    const controls = [...form.elements, cancel].filter(control => !control.disabled);
     isSaving = true;
     controls.forEach(control => { control.disabled = true; });
     save.textContent = 'กำลังบันทึก…';
@@ -2240,21 +2242,21 @@ function openOfficeLayout() {
     try {
       data.officeLayout = isPreview ? { revision: '', rows }
         : await phoenixRequest('savePhoenixOfficeLayout', { rows, previousRevision });
-      dialog.close();
       render();
       notice('บันทึกผังข้อมูลสำนักแล้ว');
       byId('notice').classList.add('success');
     } catch (failure) {
       setError(rpcErrorText(failure));
+      error.scrollIntoView({ block: 'nearest' });
     } finally {
       isSaving = false;
       controls.forEach(control => { control.disabled = false; });
       save.textContent = 'บันทึกผัง';
+      updateTargets();
     }
   };
-  setError('');
   renderDraft();
-  dialog.showModal();
+  save.focus({ preventScroll: true });
 }
 
 function appendLegacyOfficeInfo(body) {
@@ -3051,9 +3053,6 @@ byId('entryDialog').addEventListener('cancel', event => {
   if (isSaving) event.preventDefault();
 });
 byId('entryForm').addEventListener('submit', submitEntry);
-byId('officeLayoutDialog').addEventListener('cancel', event => {
-  if (isSaving) event.preventDefault();
-});
 byId('calendarDeleteDialog').addEventListener('cancel', event => {
   if (isSaving) event.preventDefault();
 });
