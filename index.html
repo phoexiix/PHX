@@ -1003,20 +1003,36 @@ function renderTravel(target) {
   const fields = element('div', 'travel-fields');
   const provinces = Object.keys(AREAS).sort((a, b) => AREAS[a].name.localeCompare(AREAS[b].name, 'th'));
 
-  function field(title, options) {
+  const suggestions = element('datalist');
+  suggestions.id = 'travel-province-options';
+  suggestions.append(...provinces.map(code => new Option(AREAS[code].name)));
+
+  function provinceField(title) {
     const label = element('label', '', title);
-    const select = element('select');
-    select.required = true;
-    select.append(...options.map(([value, name]) => new Option(name, value)));
-    label.append(select);
+    const input = element('input');
+    input.type = 'text';
+    input.required = true;
+    input.placeholder = 'พิมพ์หรือเลือกจังหวัด';
+    input.autocomplete = 'off';
+    input.setAttribute('list', suggestions.id);
+    label.append(input);
     fields.append(label);
-    return select;
+    return input;
   }
 
-  const provinceOptions = provinces.map(code => [code, AREAS[code].name]);
-  const from = field('จังหวัดต้นทาง', [['', 'เลือกต้นทาง'], ...provinceOptions]);
-  const to = field('จังหวัดปลายทาง', [['', 'เลือกปลายทาง'], ...provinceOptions]);
-  const mode = field('วิธีเดินทาง', [['air', 'ทางอากาศ'], ['road', 'ภาคพื้นดิน']]);
+  function provinceCode(input) {
+    const name = input.value.trim().replace(/^จังหวัด\s*/, '');
+    if (name === 'กรุงเทพ' || name === 'กรุงเทพฯ' || name === 'กทม.' || name === 'กทม') return '10';
+    return provinces.find(code => AREAS[code].name === name);
+  }
+
+  const from = provinceField('จังหวัดต้นทาง');
+  const to = provinceField('จังหวัดปลายทาง');
+  const modeLabel = element('label', '', 'วิธีเดินทาง');
+  const mode = element('select');
+  mode.append(new Option('ทางอากาศ', 'air'), new Option('ภาคพื้นดิน', 'road'));
+  modeLabel.append(mode);
+  fields.append(modeLabel, suggestions);
   const submit = element('button', 'primary-action', 'คำนวณเวลา');
   submit.type = 'submit';
   const actions = element('div', 'entry-actions');
@@ -1040,21 +1056,35 @@ function renderTravel(target) {
   target.append(panel);
 
   let submission = 0;
-  form.addEventListener('change', () => {
+  function clearTravelResult() {
     submission++;
     submit.disabled = false;
     output.replaceChildren();
-  });
+    from.removeAttribute('aria-invalid');
+    to.removeAttribute('aria-invalid');
+  }
+  from.addEventListener('input', clearTravelResult);
+  to.addEventListener('input', clearTravelResult);
+  mode.addEventListener('change', clearTravelResult);
   form.addEventListener('submit', async event => {
     event.preventDefault();
-    if (from.value === to.value) {
+    const fromCode = provinceCode(from);
+    const toCode = provinceCode(to);
+    if (!fromCode || !toCode) {
+      output.replaceChildren(element('p', 'notice error', 'กรุณาพิมพ์ชื่อจังหวัดให้ครบหรือเลือกจังหวัดจากรายการ'));
+      const invalid = fromCode ? to : from;
+      invalid.setAttribute('aria-invalid', 'true');
+      invalid.focus();
+      return;
+    }
+    if (fromCode === toCode) {
       output.replaceChildren(element('p', 'notice error', 'กรุณาเลือกจังหวัดต้นทางและปลายทางต่างกัน'));
       return;
     }
     const request = ++submission;
     submit.disabled = true;
     output.replaceChildren(element('p', 'caption', 'กำลังคำนวณเส้นทาง…'));
-    const plan = travelPlan(from.value, to.value, mode.value);
+    const plan = travelPlan(fromCode, toCode, mode.value);
     for (const leg of plan.legs) {
       if (leg.type === 'ขับรถ') Object.assign(leg, await travelRoad(leg.a, leg.b));
       if (request !== submission) return;
