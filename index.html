@@ -91,6 +91,11 @@ h3 { font-size: 17px; margin: 4px 0 0; }
 .item { display: grid; grid-template-columns: 67px minmax(0,1fr) auto; width: 100%; align-items: center; gap: 12px; padding: 13px 17px; min-height: 68px; background: white; border: 0; color: var(--ink); text-align: left; }
 .item.profile-item { grid-template-columns: minmax(0, 1fr); }
 .profile-item .caption { white-space: pre-wrap; }
+.office-structure { overflow-x: auto; padding: 16px; }
+.office-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; min-width: 620px; }
+.office-card { display: grid; align-content: start; gap: 6px; min-height: 88px; overflow-wrap: anywhere; }
+.office-card.commander { grid-column: 1 / -1; justify-self: center; width: calc((100% - 40px) / 5); border-color: #b88b55; }
+.office-card .caption { white-space: normal; }
 .item + .item { border-top: 1px solid #eeece6; }
 .item:focus-visible { outline-offset: -3px; }
 .item strong, .item .caption { display: block; overflow-wrap: anywhere; }
@@ -475,7 +480,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 
 const SECTIONS = {
   home: { label: 'เมนูหลัก', english: 'COMMAND OVERVIEW' },
-  profile: { label: 'ข้อมูลผู้บัญชาการ', english: 'SUPREME COMMANDER PROFILE', description: 'ข้อมูลประจำตัว ตำแหน่ง และหน้าที่รับผิดชอบ' },
+  profile: { label: 'ข้อมูลสำนัก', english: 'OFFICE DIRECTORY', description: 'โครงสร้างสำนักและข้อมูลบุคลากร' },
   calendar: { label: 'ตารางปฏิทิน', english: 'COMMAND CALENDAR', description: 'ดูตารางงานรายวันและเพิ่มรายการตามวันที่' },
   field77: { label: 'ภารกิจวางกำลังฟินิกซ์', english: 'PHOENIX DEPLOYMENT MISSION', description: 'ดูภารกิจแยกตามภาค จังหวัด และอำเภอหรือเขต' },
   travel: { label: 'คำนวณการเดินทางในประเทศ', english: 'DOMESTIC TRAVEL ESTIMATOR', description: 'ประมาณเวลาบินและเวลาขับรถระหว่างจังหวัด' },
@@ -486,6 +491,16 @@ const ENTRY_FIELDS = {
   calendar: [['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'], ['time', 'เวลา'], ['title', 'หัวข้อตารางงาน'], ['category', 'ประเภทตารางงาน'], ['location', 'สถานที่'], ['details', 'รายละเอียด']],
   field77: [['date', 'วันที่เดินทาง'], ['title', 'หัวข้อการเดินทาง'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
 };
+const OFFICE_POSITIONS = {
+  commander: 'ผู้บัญชาการสูงสุด',
+  'secretary-1': 'เลขานุการ คนที่ 1',
+  'secretary-2': 'เลขานุการ คนที่ 2',
+  'deputy-1': 'รองเลขานุการ คนที่ 1',
+  'deputy-2': 'รองเลขานุการ คนที่ 2',
+  'deputy-3': 'รองเลขานุการ คนที่ 3',
+  staff: 'บุคลากรสำนัก',
+};
+const OFFICE_FORM_FIELDS = [['officePosition', 'ตำแหน่ง'], ['title', 'ชื่อ–นามสกุล'], ['details', 'รายละเอียด (ไม่บังคับ)']];
 const CALENDAR_FORM_FIELDS = [
   ['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'],
   ['category', 'ประเภทตารางงาน'], ['details', 'รายละเอียด (ไม่บังคับ)'],
@@ -1931,9 +1946,53 @@ function moveCalendarMonth(offset) {
 
 function renderSection(target) {
   const panel = element('section', 'panel');
-  panel.append(element('div', 'list-head', data.profile.length + ' หัวข้อข้อมูล'));
-  appendEntries(panel, 'profile', data.profile, 'ยังไม่มีข้อมูลผู้บัญชาการสูงสุด');
+  panel.append(element('h3', 'panel-head', 'โครงสร้างสำนัก'));
+  const frame = element('div', 'office-structure');
+  const grid = element('div', 'office-grid');
+  const legacy = data.profile.filter(entry => !entry.officePosition);
+  const legacyName = legacy.find(entry => /^ชื่อ[–— -]+นามสกุล$/.test(entry.title))?.details;
+
+  function appendPerson(position, entry) {
+    const commander = position === 'commander';
+    const card = button('area-card office-card' + (commander ? ' commander' : ''), undefined, () => {
+      if (entry) showDetail('profile', entry);
+      else if (commander && legacy.length) showOfficeCommander();
+      else openEntryForm('profile', null, position);
+    });
+    card.append(element('strong', '', OFFICE_POSITIONS[position]),
+      element('span', 'caption', entry?.title || (commander && legacyName) || 'ยังไม่ได้เพิ่มข้อมูล'));
+    grid.append(card);
+  }
+
+  Object.keys(OFFICE_POSITIONS).filter(position => position !== 'staff').forEach(position => {
+    appendPerson(position, data.profile.find(entry => entry.officePosition === position));
+  });
+  data.profile.filter(entry => entry.officePosition === 'staff').forEach(entry => appendPerson('staff', entry));
+  frame.append(grid);
+  panel.append(frame);
   target.append(panel);
+}
+
+function appendLegacyOfficeInfo(body) {
+  const legacy = data.profile.filter(entry => !entry.officePosition);
+  if (!legacy.length) return;
+  const panel = element('div', 'panel');
+  panel.append(element('div', 'list-head', 'ข้อมูลผู้บัญชาการเดิม'));
+  appendEntries(panel, 'profile', legacy, '');
+  body.append(panel);
+}
+
+function showOfficeCommander() {
+  byId('detailKicker').textContent = SECTIONS.profile.english;
+  byId('detailTitle').textContent = OFFICE_POSITIONS.commander;
+  const body = byId('detailBody');
+  body.replaceChildren();
+  appendLegacyOfficeInfo(body);
+  body.append(button('secondary-action', 'เพิ่มข้อมูลผู้บัญชาการสูงสุด', () => {
+    byId('dialog').close();
+    openEntryForm('profile', null, 'commander');
+  }));
+  byId('dialog').showModal();
 }
 
 function appendEntries(panel, key, entries, emptyText) {
@@ -2310,6 +2369,9 @@ function showDetail(key, entry) {
   byId('detailTitle').textContent = entryDisplayTitle(key, entry);
   const body = byId('detailBody');
   const list = element('dl');
+  if (key === 'profile' && entry.officePosition) {
+    list.append(element('dt', '', 'ตำแหน่ง'), element('dd', '', OFFICE_POSITIONS[entry.officePosition] || entry.officePosition));
+  }
   if (key === 'field77') {
     list.append(element('dt', '', 'พื้นที่'), element('dd', '',
       [AREAS[entry.province]?.name || entry.province,
@@ -2327,6 +2389,7 @@ function showDetail(key, entry) {
     const label = ENTRY_FIELDS[key].find(([field]) => field === 'details')[1];
     body.append(element('h3', '', label), element('p', 'detail', entry.details));
   }
+  if (key === 'profile' && entry.officePosition === 'commander') appendLegacyOfficeInfo(body);
   appendRelated(body, entry);
   body.append(button('secondary-action', 'แก้ไขข้อมูล', () => {
     if (isLoading) return;
@@ -2412,11 +2475,12 @@ function rpcErrorText(error) {
     : message;
 }
 
-function openEntryForm(key = currentSection, existing = null) {
+function openEntryForm(key = currentSection, existing = null, officePosition = '') {
   if (isLoading || !data || !ENTRY_FIELDS[key]) return;
   if (key === 'field77' && !existing) return;
   const isCalendar = key === 'calendar';
-  const formFields = isCalendar ? CALENDAR_FORM_FIELDS : ENTRY_FIELDS[key];
+  const isOfficePerson = key === 'profile' && (!existing || Boolean(existing.officePosition));
+  const formFields = isOfficePerson ? OFFICE_FORM_FIELDS : isCalendar ? CALENDAR_FORM_FIELDS : ENTRY_FIELDS[key];
   entryRequest = existing ? { section: key, id: existing.id, row: existing.row, previous: { ...existing } }
     : { section: key, id: randomPhoenixId() };
   byId('entryTitle').textContent = existing ? 'แก้ไขข้อมูล · ' + entryDisplayTitle(key, existing) : 'เพิ่มข้อมูล · ' + SECTIONS[key].label;
@@ -2425,15 +2489,23 @@ function openEntryForm(key = currentSection, existing = null) {
   if (key === 'field77') appendAreaFields(fields, existing);
   for (const [field, title] of formFields) {
     const label = element('label', '', title);
-    const choices = field === 'category' ? Object.keys(CALENDAR_TYPES)
+    const choices = field === 'officePosition' ? Object.keys(OFFICE_POSITIONS)
+      : field === 'category' ? Object.keys(CALENDAR_TYPES)
       : field === 'status' ? STATUS_OPTIONS[key] : null;
     const control = element(choices ? 'select' : field === 'details' ? 'textarea' : 'input');
-    const value = existing?.[field] ?? (field === 'date' ? (isCalendar ? selectedCalendarDate || data.today : data.today) : '');
+    const value = existing?.[field] ?? (field === 'officePosition' ? officePosition
+      : field === 'date' ? (isCalendar ? selectedCalendarDate || data.today : data.today) : '');
     control.name = field;
     if (choices) {
-      control.append(new Option(field === 'category' ? 'เลือกประเภทตารางงาน' : 'ไม่ระบุ', ''));
+      control.append(new Option(field === 'officePosition' ? 'เลือกตำแหน่ง'
+        : field === 'category' ? 'เลือกประเภทตารางงาน' : 'ไม่ระบุ', ''));
       choices.forEach(choice => {
-        control.append(new Option(field === 'category' ? calendarTypeLabel(choice) : choice, choice));
+        const occupied = field === 'officePosition' && choice !== 'staff' && choice !== value &&
+          data.profile.some(entry => entry.officePosition === choice);
+        if (occupied) return;
+        const label = field === 'officePosition' ? OFFICE_POSITIONS[choice]
+          : field === 'category' ? calendarTypeLabel(choice) : choice;
+        control.append(new Option(label, choice));
       });
       if (value && !choices.includes(value)) control.append(new Option(value, value));
     } else if (field === 'date' || field === 'endDate') {
@@ -2442,7 +2514,8 @@ function openEntryForm(key = currentSection, existing = null) {
       control.maxLength = field === 'details' ? 8000 : 300;
     }
     control.value = value;
-    control.required = field === 'title' || (isCalendar && (field === 'date' || field === 'category'));
+    control.required = field === 'title' || field === 'officePosition' ||
+      (isCalendar && (field === 'date' || field === 'category'));
     label.append(control);
     fields.append(label);
   }
@@ -2549,8 +2622,23 @@ function submitEntry(event) {
     entryRequest.calendarDate = selectedCalendarDate >= fields.date && selectedCalendarDate <= endDate
       ? selectedCalendarDate : fields.date;
   } else if (!fields.title.trim()) {
-    entryError('กรุณากรอกหัวข้อ');
+    entryError(Object.hasOwn(fields, 'officePosition') ? 'กรุณากรอกชื่อ–นามสกุล' : 'กรุณากรอกหัวข้อ');
     return;
+  }
+  if (Object.hasOwn(fields, 'officePosition')) {
+    if (!isPreview && !data.officeProfileEnabled) {
+      entryError('กรุณาเผยแพร่ Code.gs เวอร์ชันใหม่ใน Apps Script แล้วอัปเดตหน้าเว็บ');
+      return;
+    }
+    if (!Object.hasOwn(OFFICE_POSITIONS, fields.officePosition)) {
+      entryError('กรุณาเลือกตำแหน่ง');
+      return;
+    }
+    if (fields.officePosition !== 'staff' && data.profile.some(entry =>
+        entry.officePosition === fields.officePosition && entry.id !== id)) {
+      entryError('ตำแหน่งนี้มีข้อมูลอยู่แล้ว กรุณาเลือกตำแหน่งอื่น');
+      return;
+    }
   }
   byId('entryError').hidden = true;
   setSaving(true);
