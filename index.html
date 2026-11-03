@@ -158,6 +158,14 @@ dialog::backdrop { background: #101c27ad; }
 .area-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); gap: 8px; }
 .area-card { display: grid; gap: 4px; text-align: left; padding: 12px 14px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 7px; }
 .area-card:hover { border-color: #b88b55; background: #fffdf8; }
+.area-card.report-complete { border: 2px solid #348259; }
+.area-card.report-partial { border: 2px solid #bd414c; }
+.report-complete .report-state { color: #256442; }
+.report-partial .report-state { color: #9a2733; }
+.report-checklist { max-height: 280px; overflow: auto; margin: 0; border: 1px solid var(--line); border-radius: 6px; }
+.report-checklist label { display: flex; align-items: center; gap: 8px; padding: 4px; font-weight: 400; }
+.report-checklist input[type="checkbox"] { width: auto; margin: 0; }
+
 .area-records { margin-top: 14px; }
 .area-records h3 { margin: 0; }
 #summaryDialog { width: min(690px, calc(100% - 28px)); }
@@ -275,6 +283,7 @@ dialog::backdrop { background: #101c27ad; }
     <div class="section-head">
       <div><div class="kicker" id="sectionKicker"></div><h2 id="sectionTitle" tabindex="-1"></h2></div>
       <div class="section-actions"><span id="updated" class="caption"></span>
+        <button id="areaReport" class="secondary-action" type="button" hidden>รายการ</button>
         <button id="areaSummary" class="secondary-action" type="button" hidden>สรุป</button>
         <button id="addEntry" class="primary-action" type="button" hidden>+ เพิ่มข้อมูล</button>
       </div>
@@ -304,6 +313,19 @@ dialog::backdrop { background: #101c27ad; }
     <div class="entry-actions"><span id="entryState" class="caption" role="status"></span>
       <button id="saveEntry" class="primary-action" type="submit">บันทึกข้อมูล</button>
     </div>
+  </form>
+</dialog>
+<dialog id="reportDialog" aria-labelledby="reportTitle">
+  <div class="dialog-head">
+    <div><div class="kicker">PROVINCIAL REPORT</div><h2 id="reportTitle">รายการรายงาน 77</h2></div>
+    <button id="closeReport" class="close" type="button" aria-label="ปิดรายการรายงาน">×</button>
+  </div>
+  <div id="reportModes" class="filters" aria-label="ประเภทรายงาน"></div>
+  <form id="reportForm" class="entry-form" hidden>
+    <label>จังหวัด <select id="reportProvince" required></select></label>
+    <div id="reportFields"></div>
+    <p id="reportError" class="notice error" role="alert" hidden></p>
+    <div class="entry-actions"><button id="saveReport" class="primary-action" type="submit">บันทึก</button></div>
   </form>
 </dialog>
 <dialog id="summaryDialog" aria-labelledby="summaryTitle">
@@ -524,7 +546,7 @@ function connection(state, label) {
 }
 
 function refresh() {
-  if (isLoading || isSaving || byId('entryDialog').open) return;
+  if (isLoading || isSaving || byId('entryDialog').open || byId('reportDialog').open) return;
   if (!isAppsScript) {
     if (!data) {
       data = sampleData(new Date());
@@ -540,11 +562,12 @@ function refresh() {
   isLoading = true;
   byId('refresh').disabled = true;
   byId('addEntry').disabled = true;
+  byId('areaReport').disabled = true;
   byId('content').setAttribute('aria-busy', 'true');
   connection('loading', 'กำลังโหลดข้อมูล');
   notice('');
   google.script.run.withSuccessHandler(result => {
-    if (!result || !Object.keys(ENTRY_FIELDS).every(key => Array.isArray(result[key]))) {
+    if (!result?.areaReports || !Object.keys(ENTRY_FIELDS).every(key => Array.isArray(result[key]))) {
       finishRefresh('error', 'โค้ดเว็บและ Apps Script คนละเวอร์ชัน');
       notice('กรุณาใช้ Code.gs และ index.html จากชุดเดียวกัน แล้วเผยแพร่เวอร์ชันใหม่', true);
       if (!data) render();
@@ -565,6 +588,7 @@ function finishRefresh(state, label) {
   isLoading = false;
   byId('refresh').disabled = false;
   byId('addEntry').disabled = false;
+  byId('areaReport').disabled = false;
   byId('content').setAttribute('aria-busy', 'false');
   connection(state, label);
 }
@@ -578,6 +602,8 @@ function render() {
   byId('sidebar').hidden = isHome;
   byId('menuToggle').hidden = isHome;
   byId('addEntry').hidden = isHome || !data || (isArea && !areaView.province);
+  byId('areaReport').hidden = !isArea || !data;
+  byId('areaReport').disabled = isLoading;
   byId('areaSummary').hidden = !isArea || !areaView.province || !data;
   byId('sectionTitle').textContent = section.label;
   byId('sectionKicker').textContent = section.english;
@@ -875,9 +901,13 @@ function renderAreas(target) {
   target.append(heading);
 
   const grid = element('div', 'area-grid');
-  function appendChoice(label, detail, action) {
+  function appendChoice(label, detail, action, status) {
     const control = button('area-card', undefined, action);
     control.append(element('strong', '', label), element('span', 'caption', detail));
+    if (status) {
+      control.classList.add(status.className);
+      control.append(element('span', 'caption report-state', status.label));
+    }
     grid.append(control);
   }
   if (region < 0) {
@@ -888,7 +918,7 @@ function renderAreas(target) {
       const count = byProvince.get(code)?.length || 0;
       const detail = Object.keys(item.districts).length + ' ' + districtWord(code) +
         (data ? ' · ' + count + ' รายการ' : '');
-      appendChoice(item.name, detail, () => changeArea(region, code));
+      appendChoice(item.name, detail, () => changeArea(region, code), areaReportStatus(code));
     });
   } else if (!district) {
     Object.keys(area.districts).forEach(code => {
@@ -911,6 +941,122 @@ function renderAreas(target) {
     }
     target.append(panel);
   }
+}
+
+function areaReportStatus(province) {
+  const report = data?.areaReports?.[province];
+  const count = Number(Boolean(report?.result)) + Number(Array.isArray(report?.districts));
+  if (count === 2) return { className: 'report-complete', label: 'รายงานครบ' };
+  if (count === 1) return { className: 'report-partial', label: 'รายงานยังไม่ครบ' };
+  return null;
+}
+
+function openAreaReport() {
+  if (!data || isLoading || isSaving) return;
+  const dialog = byId('reportDialog');
+  const form = byId('reportForm');
+  const province = byId('reportProvince');
+  const fields = byId('reportFields');
+  const modes = byId('reportModes');
+  const feedback = byId('reportError');
+  const save = byId('saveReport');
+  let mode = '';
+
+  province.replaceChildren(new Option('เลือกจังหวัด', ''));
+  REGIONS.forEach(([name, codes]) => {
+    const group = element('optgroup');
+    group.label = name;
+    codes.forEach(code => group.append(new Option(AREAS[code].name, code)));
+    province.append(group);
+  });
+  province.value = areaView.province || '';
+  function showFields() {
+    const code = province.value;
+    const report = data.areaReports[code];
+    fields.replaceChildren();
+    save.disabled = !code;
+    feedback.hidden = true;
+    if (!code) return;
+    if (mode === 'province') {
+      const label = element('label', '', 'ผลรายงานจังหวัด');
+      const select = element('select');
+      select.name = 'result';
+      select.required = true;
+      select.append(new Option('เลือกผลรายงาน', ''), new Option('ผ่าน', 'ผ่าน'), new Option('ไม่ผ่าน', 'ไม่ผ่าน'));
+      select.value = report?.result || '';
+      label.append(select);
+      fields.append(label);
+      return;
+    }
+
+    const checklist = element('fieldset', 'report-checklist');
+    const selected = new Set(report?.districts || []);
+    checklist.append(element('legend', '', 'เลือก' + districtWord(code) + 'ที่ผ่าน'));
+    for (const district of Object.keys(AREAS[code].districts)) {
+      const label = element('label', '', districtLabel(code, district));
+      const check = element('input');
+      check.type = 'checkbox';
+      check.name = 'district';
+      check.value = district;
+      check.checked = selected.has(district);
+      label.prepend(check);
+      checklist.append(label);
+    }
+    fields.append(checklist);
+  }
+
+  modes.replaceChildren();
+  [['province', 'รายงานจังหวัด'], ['district', 'รายงานอำเภอ']].forEach(([value, label]) => {
+    const control = button('', label, () => {
+      mode = value;
+      for (const item of modes.children) item.setAttribute('aria-pressed', String(item === control));
+      form.hidden = false;
+      showFields();
+      (province.value ? fields.querySelector('select, input') : province)?.focus();
+    });
+    control.setAttribute('aria-pressed', 'false');
+    modes.append(control);
+  });
+  province.onchange = showFields;
+  form.onsubmit = event => {
+    event.preventDefault();
+    if (isSaving || !province.value || !mode) return;
+    const values = new FormData(form);
+    const code = province.value;
+    const value = mode === 'province' ? values.get('result') : values.getAll('district');
+    if (mode === 'province' && !value) {
+      feedback.textContent = 'กรุณาเลือก ผ่าน หรือ ไม่ผ่าน';
+      feedback.hidden = false;
+      return;
+    }
+    function setReportSaving(saving) {
+      isSaving = saving;
+      for (const control of [...form.elements, ...modes.children, byId('closeReport')]) control.disabled = saving;
+      save.textContent = saving ? 'กำลังบันทึก…' : 'บันทึก';
+    }
+    function saved(report) {
+      data.areaReports[code] = report;
+      setReportSaving(false);
+      dialog.close();
+      render();
+      notice('บันทึกรายงานแล้ว');
+      byId('notice').classList.add('success');
+    }
+    feedback.hidden = true;
+    setReportSaving(true);
+    if (!isAppsScript) {
+      const report = data.areaReports[code] || { result: '', districts: null };
+      saved(mode === 'province' ? { ...report, result: value } : { ...report, districts: value });
+      return;
+    }
+    google.script.run.withSuccessHandler(saved).withFailureHandler(error => {
+      setReportSaving(false);
+      feedback.textContent = rpcErrorText(error);
+      feedback.hidden = false;
+    }).savePhoenixAreaReport({ province: code, mode, value });
+  };
+  form.hidden = true;
+  dialog.showModal();
 }
 
 function areaSummaryBlock(label, entries, expanded = false) {
@@ -1263,7 +1409,7 @@ function finishEntry(result) {
 function sampleData(now) {
   const today = dateKey(now);
   return {
-    today, updatedAt: BANGKOK_TIME.format(now),
+    today, updatedAt: BANGKOK_TIME.format(now), areaReports: {},
     profile: [
       { title: 'ชื่อ–นามสกุล', details: '' },
       { title: 'ตำแหน่ง', details: 'ผู้บัญชาการสูงสุด' },
@@ -1282,6 +1428,11 @@ function sampleData(now) {
 
 setupNavigation();
 byId('addEntry').addEventListener('click', () => openEntryForm());
+byId('areaReport').addEventListener('click', openAreaReport);
+byId('closeReport').addEventListener('click', () => byId('reportDialog').close());
+byId('reportDialog').addEventListener('cancel', event => {
+  if (isSaving) event.preventDefault();
+});
 byId('areaSummary').addEventListener('click', openAreaSummary);
 byId('closeEntry').addEventListener('click', () => byId('entryDialog').close());
 byId('entryDialog').addEventListener('cancel', event => {
