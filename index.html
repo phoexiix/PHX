@@ -309,6 +309,8 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .secret-list:not(:empty) { margin-top: 12px; }
 .secret-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .secret-toolbar select { font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 7px; background: white; color: var(--ink); }
+.secret-area-card .secret-area-label { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+.secret-area-count { flex: none; min-width: 24px; text-align: center; }
 .secret-envelope { border: 1px solid var(--line); border-radius: 7px; }
 .secret-envelope-title { padding: 12px; overflow-wrap: anywhere; }
 .secret-badges { display: inline-flex; flex-wrap: wrap; gap: 5px; margin-inline-start: 8px; vertical-align: middle; }
@@ -965,6 +967,7 @@ function createSecretPage() {
   gate.append(secretField('รหัสยืนยัน', pinInput), unlock);
   const inboxStatus = secretMessage();
   const controls = element('div', 'secret-controls');
+  const areaPicker = element('div', 'secret-list');
   const list = element('div', 'secret-list');
   const filter = element('select');
   filter.setAttribute('aria-label', 'กรองสถานะซองลับ');
@@ -978,7 +981,7 @@ function createSecretPage() {
   const close = button('secondary-action', 'ล็อกกล่อง', lockInbox);
   toolbar.append(filter, reload, close);
   controls.append(counts, toolbar);
-  inboxBody.append(gate, receipt, inboxStatus, controls, list);
+  inboxBody.append(gate, receipt, inboxStatus, controls, areaPicker, list);
   inbox.append(inboxHeading, inboxBody);
   panel.append(inbox, outgoing);
 
@@ -988,6 +991,8 @@ function createSecretPage() {
   let sendBusy = false;
   let submissionId = '';
   let openId = '';
+  let inboxRegion = -1;
+  let inboxProvince = '';
 
   function updateProvinces() {
     const previous = province.value;
@@ -1009,6 +1014,7 @@ function createSecretPage() {
       item.disabled = sendBusy;
       return item;
     }));
+    if (pin && !inboxProvince) renderInbox();
   }
 
   outgoing.addEventListener('cancel', event => {
@@ -1055,7 +1061,8 @@ function createSecretPage() {
 
   function lockInbox() {
     if (inboxBusy) return;
-    pin = openId = '';
+    pin = openId = inboxProvince = '';
+    inboxRegion = -1;
     reports = [];
     filter.value = 'all';
     setSecretMessage(inboxStatus, '');
@@ -1108,20 +1115,85 @@ function createSecretPage() {
     return filter.value === report.decision;
   }
 
+  function selectInboxArea(region, code = '') {
+    inboxRegion = region;
+    inboxProvince = code;
+    openId = '';
+    filter.value = 'all';
+    renderInbox();
+    areaPicker.querySelector('h3').focus();
+  }
+
   function renderInbox() {
     gate.hidden = Boolean(pin);
     controls.hidden = !pin;
+    areaPicker.replaceChildren();
     list.replaceChildren();
     if (!pin) return;
-    const unread = reports.filter(report => !report.readDate).length;
-    const pending = reports.filter(report => !report.decision).length;
-    counts.textContent = 'ทั้งหมด ' + reports.length + ' · ยังไม่อ่าน ' + unread + ' · รอพิจารณา ' + pending;
-    const visible = reports.filter(matches);
+    filter.hidden = !inboxProvince;
+
+    const byProvince = new Map();
+    for (const report of reports) {
+      if (!byProvince.has(report.province)) byProvince.set(report.province, []);
+      byProvince.get(report.province).push(report);
+    }
+    const region = REGIONS[inboxRegion];
+    const provinceReports = code => byProvince.get(code) || [];
+    const regionReports = codes => codes.flatMap(provinceReports);
+    const eligibleCodes = codes => codes.filter(code => areaResult(code) === 'ผ่าน' || byProvince.has(code));
+    const scoped = inboxProvince ? provinceReports(inboxProvince) : region ? regionReports(region[1]) : reports;
+    const unread = scoped.filter(report => !report.readDate).length;
+    const pending = scoped.filter(report => !report.decision).length;
+    counts.textContent = 'ทั้งหมด ' + scoped.length + ' · ยังไม่อ่าน ' + unread + ' · รอพิจารณา ' + pending;
+
+    const heading = element('h3', 'area-heading', inboxProvince ? AREAS[inboxProvince].name :
+      region ? region[0] : 'เลือกภาค');
+    heading.tabIndex = -1;
+    if (region) {
+      const crumb = element('nav', 'area-crumb');
+      crumb.setAttribute('aria-label', 'ตำแหน่งในกล่องซองลับ');
+      crumb.append(button('secondary-action', 'ทุกภาค', () => selectInboxArea(-1)));
+      if (inboxProvince) crumb.append(button('secondary-action', region[0], () => selectInboxArea(inboxRegion)));
+      areaPicker.append(crumb);
+    }
+    areaPicker.append(heading);
+
+    if (!inboxProvince) {
+      const grid = element('div', 'area-grid');
+      function appendChoice(name, entries, detail, action) {
+        const card = button('area-card secret-area-card', undefined, action);
+        const label = element('span', 'secret-area-label');
+        label.append(element('strong', '', name));
+        const newCount = entries.filter(report => !report.readDate).length;
+        if (entries.length) {
+          const count = element('span', 'secret-badge secret-area-count' + (newCount ? ' urgent' : ''), String(entries.length));
+          count.setAttribute('aria-hidden', 'true');
+          label.append(count);
+        }
+        card.setAttribute('aria-label', name + ' · ' + entries.length + ' รายงาน · ยังไม่อ่าน ' + newCount);
+        card.append(label, element('span', 'caption', detail + (newCount ? ' · ยังไม่อ่าน ' + newCount : '')));
+        grid.append(card);
+      }
+      if (region) {
+        for (const code of eligibleCodes(region[1])) {
+          const entries = provinceReports(code);
+          appendChoice(AREAS[code].name, entries, entries.length + ' รายงาน', () => selectInboxArea(inboxRegion, code));
+        }
+      } else {
+        REGIONS.forEach(([name, codes], index) => appendChoice(name, regionReports(codes),
+          eligibleCodes(codes).length + ' จังหวัด', () => selectInboxArea(index)));
+      }
+      areaPicker.append(grid.childElementCount ? grid : element('p', 'empty', 'ภาคนี้ยังไม่มีจังหวัดที่ผ่านการประเมินหรือมีรายงาน'));
+      return;
+    }
+
+    const visible = scoped.filter(matches);
     if (!visible.length) list.append(element('p', 'empty', 'ไม่มีซองลับในสถานะนี้'));
     for (const report of visible) {
       const envelope = element('details', 'secret-envelope');
       envelope.open = report.id === openId;
       envelope.addEventListener('toggle', () => {
+        if (!envelope.isConnected) return;
         if (envelope.open) openId = report.id;
         else if (openId === report.id) openId = '';
       });
