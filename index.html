@@ -285,6 +285,16 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
   }
   .calendar-day .calendar-tag, .calendar-grid .calendar-range { font-size: 10px; line-height: 12px; padding: 2px 3px; }
 }
+.travel-panel .caption { margin: 0; }
+.travel-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.travel-results:empty { display: none; }
+.travel-legs { list-style: none; margin: 0; padding: 0; }
+.travel-legs li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; border-bottom: 1px solid var(--line); padding: 12px 0; }
+.travel-leg-time { font-weight: 700; }
+.travel-total { margin: 10px 0 0; padding: 12px; border-radius: 6px; background: #f6f1e6; font-weight: 700; }
+@media (max-width: 690px) {
+  .travel-fields { grid-template-columns: minmax(0, 1fr); }
+}
 </style>
 </head>
 <body data-page="home">
@@ -299,6 +309,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
     <symbol id="i-home" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
     <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h2m4 0h2"/></symbol>
     <symbol id="i-field77" viewBox="0 0 24 24"><path d="M5 3h12l3 3v15H5Zm4 6h7m-7 4h7m-7 4h5"/></symbol>
+    <symbol id="i-travel" viewBox="0 0 24 24"><path d="M3 6h12a4 4 0 0 1 0 8H9a3 3 0 0 0 0 6h12m-4-4 4 4-4 4"/><circle cx="3" cy="6" r="2" fill="white"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 1 0-2 8m2-14v6h-6"/></symbol>
   </defs>
 </svg>
@@ -424,6 +435,7 @@ const SECTIONS = {
   profile: { label: 'ข้อมูลผู้บัญชาการ', english: 'SUPREME COMMANDER PROFILE', description: 'ข้อมูลประจำตัว ตำแหน่ง และหน้าที่รับผิดชอบ' },
   calendar: { label: 'ตารางปฏิทิน', english: 'COMMAND CALENDAR', description: 'ดูตารางงานรายวันและเพิ่มรายการตามวันที่' },
   field77: { label: 'ภารกิจวางกำลังฟินิกซ์', english: 'PHOENIX DEPLOYMENT MISSION', description: 'ดูภารกิจแยกตามภาค จังหวัด และอำเภอหรือเขต' },
+  travel: { label: 'คำนวณการเดินทางในประเทศ', english: 'DOMESTIC TRAVEL ESTIMATOR', description: 'ประมาณเวลาบินและเวลาขับรถระหว่างจังหวัด' },
 };
 const ENTRY_FIELDS = {
   profile: [['title', 'หัวข้อข้อมูล'], ['details', 'รายละเอียด']],
@@ -794,19 +806,27 @@ function render() {
   const target = byId('content');
   const isHome = currentSection === 'home';
   const isArea = currentSection === 'field77';
+  const isTravel = currentSection === 'travel';
   document.body.dataset.page = currentSection;
   byId('sidebar').hidden = isHome;
   byId('menuToggle').hidden = isHome;
-  byId('addEntry').hidden = isHome || isArea || !data;
+  byId('addEntry').hidden = isHome || isArea || isTravel || !data;
   byId('areaReport').hidden = !isArea || !data;
   byId('areaReport').disabled = isLoading;
   byId('areaSummary').hidden = !isArea || !areaView.province || !data;
   byId('sectionTitle').textContent = section.label;
   byId('sectionKicker').textContent = section.english;
-  byId('updated').textContent = data ? 'อัปเดต ' + data.updatedAt + ' น.' : '';
+  byId('updated').textContent = data && !isTravel ? 'อัปเดต ' + data.updatedAt + ' น.' : '';
   for (const node of byId('navItems').children) {
     if (node.dataset.section === currentSection) node.setAttribute('aria-current', 'page');
     else node.removeAttribute('aria-current');
+  }
+  if (isTravel) {
+    if (target.firstElementChild !== travelPanel) {
+      target.replaceChildren();
+      renderTravel(target);
+    }
+    return;
   }
   target.replaceChildren();
   if (isHome) {
@@ -823,6 +843,241 @@ function render() {
   }
   if (currentSection === 'calendar') renderCalendar(target);
   else renderSection(target);
+}
+
+// จุดอ้างอิงในตัวเมือง: https://www.sothailand.com/pscodgis/JsonData.aspx?fn=provincedata
+const TRAVEL_CITIES = {
+  10:[13.7564,100.4993], 11:[13.5870,100.6294], 12:[13.8508,100.4852],
+  13:[13.9964,100.5409], 14:[14.3946,100.5861], 15:[14.5830,100.4490],
+  16:[14.7802,100.6245], 17:[14.8995,100.4023], 18:[15.1886,100.1329],
+  19:[14.5123,100.9163], 20:[13.3488,100.9878], 21:[12.6920,101.3426],
+  22:[12.5936,102.1158], 23:[12.2235,102.5772], 24:[13.7113,101.0346],
+  25:[14.0783,101.3763], 26:[14.2188,101.2005], 27:[13.8574,102.2337],
+  30:[14.9750,102.0978], 31:[14.9962,103.1029], 32:[14.8959,103.5150],
+  33:[15.1202,104.3290], 34:[15.2287,104.8564], 35:[15.7941,104.1441],
+  36:[15.8060,102.0315], 37:[15.8585,104.6288], 38:[18.3610,103.6464],
+  39:[17.2041,102.4407], 40:[16.4530,102.8181], 41:[17.4017,102.7785],
+  42:[17.4910,101.7316], 43:[17.8783,102.7413], 44:[16.1851,103.3006],
+  45:[16.0567,103.6531], 46:[16.4327,103.5065], 47:[17.1665,104.1448],
+  48:[17.3947,104.7695], 49:[16.5425,104.7235], 50:[18.7885,98.9942],
+  51:[18.5796,99.0075], 52:[18.2888,99.4909], 53:[17.6252,100.0993],
+  54:[18.1446,100.1403], 55:[18.7953,100.7780], 56:[19.1650,99.9020],
+  57:[19.8986,99.8070], 58:[19.3010,97.9686], 60:[15.7047,100.1372],
+  61:[15.3802,100.0245], 62:[16.4828,99.5227], 63:[16.8837,99.1258],
+  64:[17.0068,99.8265], 65:[16.8211,100.2659], 66:[16.4390,100.3490],
+  67:[16.4190,101.1591], 70:[13.5368,99.8171], 71:[14.0250,99.5316],
+  72:[14.4745,100.1177], 73:[13.8191,100.1068], 74:[13.5378,100.2506],
+  75:[13.4072,99.9981], 76:[13.1119,99.9447], 77:[11.8129,99.7974],
+  80:[8.4305,99.9612], 81:[8.0520,98.8316], 82:[8.4501,98.5256],
+  83:[7.8840,98.3910], 84:[9.1382,99.3217], 85:[9.9624,98.6386],
+  86:[10.4931,99.1799], 90:[7.2007,100.5965], 91:[6.6238,100.0672],
+  92:[7.5580,99.6109], 93:[7.6179,100.0779], 94:[6.8696,101.2501],
+  95:[6.5411,101.2813], 96:[6.4255,101.8231],
+};
+
+// อ้างอิงรายชื่อสนามบินจาก กพท. และตำแหน่งจาก OurAirports (พิกัดประมาณบริเวณอาคารผู้โดยสาร)
+// https://www.caat.or.th/aviation/airport/public-airport-list/
+// https://ourairports.com/countries/TH/
+const TRAVEL_AIRPORTS = {
+  BKK:['สุวรรณภูมิ',13.6900,100.7501], UTP:['อู่ตะเภา',12.6366,101.0167],
+  TDX:['ตราด',12.2732,102.3193], NAK:['นครราชสีมา',14.9474,102.3112],
+  BFV:['บุรีรัมย์',15.2268,103.2526], UBP:['อุบลราชธานี',15.2496,104.8682],
+  UTH:['อุดรธานี',17.3865,102.7759], LOE:['เลย',17.4401,101.7212],
+  KKC:['ขอนแก่น',16.4660,102.7860], ROI:['ร้อยเอ็ด',16.1152,103.7759],
+  SNO:['สกลนคร',17.1956,104.1229], KOP:['นครพนม',17.3840,104.6486],
+  CNX:['เชียงใหม่',18.7688,98.9688], LPT:['ลำปาง',18.2738,99.5069],
+  PRH:['แพร่',18.1310,100.1648], NNT:['น่านนคร',18.8050,100.7818],
+  CEI:['แม่ฟ้าหลวง เชียงราย',19.9531,99.8797], HGN:['แม่ฮ่องสอน',19.2989,97.9764],
+  MAQ:['แม่สอด',16.7014,98.5434], THS:['สุโขทัย',17.2321,99.8218],
+  PHS:['พิษณุโลก',16.7735,100.2790], PHY:['เพชรบูรณ์',16.6752,101.1961],
+  HHQ:['หัวหิน',12.6291,99.9524], NST:['นครศรีธรรมราช',8.5398,99.9429],
+  KBV:['กระบี่',8.0975,98.9785], HKT:['ภูเก็ต',8.1117,98.3065],
+  URT:['สุราษฎร์ธานี',9.1336,99.1436], UNN:['ระนอง',9.7786,98.5882],
+  CJM:['ชุมพร',10.7099,99.3598], HDY:['หาดใหญ่',6.9295,100.3934],
+  TST:['ตรัง',7.5093,99.6169], BTZ:['เบตง',5.7880,101.1531],
+  NAW:['นราธิวาส',6.5237,101.7455], PYY:['ปาย',19.3719,98.4371],
+  USM:['สมุย',9.5517,100.0637],
+};
+const TRAVEL_MAIN_AIRPORT = {
+  10:'BKK', 11:'BKK', 21:'UTP', 23:'TDX', 30:'NAK', 31:'BFV', 34:'UBP',
+  41:'UTH', 42:'LOE', 40:'KKC', 45:'ROI', 47:'SNO', 48:'KOP', 50:'CNX',
+  52:'LPT', 54:'PRH', 55:'NNT', 57:'CEI', 58:'HGN', 63:'MAQ', 64:'THS',
+  65:'PHS', 67:'PHY', 77:'HHQ', 80:'NST', 81:'KBV', 83:'HKT', 84:'URT',
+  85:'UNN', 86:'CJM', 90:'HDY', 92:'TST', 95:'BTZ', 96:'NAW',
+};
+
+function travelDistance([latA, lonA], [latB, lonB]) {
+  const rad = Math.PI / 180;
+  const a = Math.sin((latB - latA) * rad / 2) ** 2 +
+    Math.cos(latA * rad) * Math.cos(latB * rad) * Math.sin((lonB - lonA) * rad / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+function travelAirportPoint(code) {
+  return TRAVEL_AIRPORTS[code].slice(1);
+}
+
+function travelAirportFor(province) {
+  if (TRAVEL_MAIN_AIRPORT[province]) return TRAVEL_MAIN_AIRPORT[province];
+  const city = TRAVEL_CITIES[province];
+  return Object.keys(TRAVEL_AIRPORTS).reduce((nearest, code) =>
+    travelDistance(city, travelAirportPoint(code)) < travelDistance(city, travelAirportPoint(nearest)) ? code : nearest);
+}
+
+function travelAirportLabel(code) {
+  return 'สนามบิน' + TRAVEL_AIRPORTS[code][0] + ' (' + code + ')';
+}
+
+function travelPlan(from, to, mode) {
+  const origin = AREAS[from].name;
+  const destination = AREAS[to].name;
+  const start = TRAVEL_CITIES[from];
+  const finish = TRAVEL_CITIES[to];
+  const road = (label, a, b) => ({ type: 'ขับรถ', label, a, b });
+  const directRoad = () => road(origin + ' → ' + destination, start, finish);
+  if (mode === 'road') return { legs: [directRoad()] };
+  const departure = travelAirportFor(from);
+  const arrival = travelAirportFor(to);
+  if (departure === arrival) return { legs: [directRoad()], sharedAirport: departure };
+  const takeoff = travelAirportPoint(departure);
+  const landing = travelAirportPoint(arrival);
+  const departureName = travelAirportLabel(departure);
+  const arrivalName = travelAirportLabel(arrival);
+  const legs = [];
+  if (!TRAVEL_MAIN_AIRPORT[from]) legs.push(road(origin + ' → ' + departureName, start, takeoff));
+  const km = travelDistance(takeoff, landing);
+  legs.push({ type: 'บินจำลอง', label: departureName + ' → ' + arrivalName, km, minutes: Math.round(20 + km / 750 * 60) });
+  if (!TRAVEL_MAIN_AIRPORT[to]) legs.push(road(arrivalName + ' → ' + destination, landing, finish));
+  return { legs };
+}
+
+let travelNextRoadRequest = 0;
+const travelRoadCache = new Map();
+
+async function travelRoad(a, b) {
+  const points = [a, b].map(([lat, lon]) => lon + ',' + lat).join(';');
+  if (travelRoadCache.has(points)) return travelRoadCache.get(points);
+  const delay = Math.max(0, travelNextRoadRequest - Date.now());
+  travelNextRoadRequest = Date.now() + delay + 1050;
+  if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch('https://routing.openstreetmap.de/routed-car/route/v1/driving/' +
+      points + '?overview=false&radiuses=2000;2000', { signal: controller.signal });
+    const result = await response.json();
+    if (result.code === 'NoRoute' || result.code === 'NoSegment') {
+      return { error: 'ไม่พบเส้นทางถนนสำหรับช่วงนี้' };
+    }
+    const route = result.routes?.[0];
+    if (!response.ok || result.code !== 'Ok' || !Number.isFinite(route?.duration) ||
+        !Number.isFinite(route.distance)) throw new Error('Invalid route response');
+    const value = { km: route.distance / 1000, minutes: Math.max(1, Math.round(route.duration / 60)) };
+    travelRoadCache.set(points, value);
+    return value;
+  } catch {
+    return { error: 'โหลดข้อมูลถนนไม่สำเร็จ ลองคำนวณอีกครั้ง' };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function travelTime(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return (hours ? hours + ' ชั่วโมง' : '') +
+    (remainder || !hours ? (hours ? ' ' : '') + remainder + ' นาที' : '');
+}
+
+let travelPanel;
+
+function renderTravel(target) {
+  if (travelPanel) {
+    target.append(travelPanel);
+    return;
+  }
+  const panel = element('section', 'panel travel-panel');
+  travelPanel = panel;
+  panel.append(element('h3', 'panel-head', 'เลือกเส้นทาง'));
+  const form = element('form', 'entry-form');
+  const fields = element('div', 'travel-fields');
+  const provinces = Object.keys(AREAS).sort((a, b) => AREAS[a].name.localeCompare(AREAS[b].name, 'th'));
+
+  function field(title, options) {
+    const label = element('label', '', title);
+    const select = element('select');
+    select.required = true;
+    select.append(...options.map(([value, name]) => new Option(name, value)));
+    label.append(select);
+    fields.append(label);
+    return select;
+  }
+
+  const provinceOptions = provinces.map(code => [code, AREAS[code].name]);
+  const from = field('จังหวัดต้นทาง', [['', 'เลือกต้นทาง'], ...provinceOptions]);
+  const to = field('จังหวัดปลายทาง', [['', 'เลือกปลายทาง'], ...provinceOptions]);
+  const mode = field('วิธีเดินทาง', [['air', 'ทางอากาศ'], ['road', 'ภาคพื้นดิน']]);
+  const submit = element('button', 'primary-action', 'คำนวณเวลา');
+  submit.type = 'submit';
+  const actions = element('div', 'entry-actions');
+  actions.append(submit);
+  const output = element('div', 'travel-results');
+  output.setAttribute('aria-live', 'polite');
+  const footnote = element('p', 'caption',
+    'เวลาบินจำลองจากระยะทางแนวตรงที่ 750 กม./ชม. + 20 นาทีสำหรับช่วงขึ้นและลง เวลารถใช้จุดอ้างอิงในตัวเมืองและเส้นทางถนนโดยประมาณ สนามบินทดแทนเลือกตามระยะทางแนวตรงจากตัวเมือง');
+  const credits = element('p', 'caption', 'ข้อมูลเส้นทางรถโดย FOSSGIS / OSRM · ');
+  const osm = element('a', '', '© OpenStreetMap contributors');
+  osm.href = 'https://www.openstreetmap.org/copyright';
+  const fix = element('a', '', 'แก้ไขข้อมูลแผนที่');
+  fix.href = 'https://www.openstreetmap.org/fixthemap';
+  for (const link of [osm, fix]) {
+    link.target = '_blank';
+    link.rel = 'noopener';
+  }
+  credits.append(osm, ' · ', fix);
+  form.append(fields, actions, output, footnote, credits);
+  panel.append(form);
+  target.append(panel);
+
+  let submission = 0;
+  form.addEventListener('change', () => {
+    submission++;
+    submit.disabled = false;
+    output.replaceChildren();
+  });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (from.value === to.value) {
+      output.replaceChildren(element('p', 'notice error', 'กรุณาเลือกจังหวัดต้นทางและปลายทางต่างกัน'));
+      return;
+    }
+    const request = ++submission;
+    submit.disabled = true;
+    output.replaceChildren(element('p', 'caption', 'กำลังคำนวณเส้นทาง…'));
+    const plan = travelPlan(from.value, to.value, mode.value);
+    for (const leg of plan.legs) {
+      if (leg.type === 'ขับรถ') Object.assign(leg, await travelRoad(leg.a, leg.b));
+      if (request !== submission) return;
+    }
+    const list = element('ol', 'travel-legs');
+    for (const leg of plan.legs) {
+      const row = element('li');
+      const route = element('div');
+      route.append(element('div', 'kicker', leg.type), element('strong', '', leg.label));
+      const detail = element('div', 'travel-leg-time', leg.error || travelTime(leg.minutes));
+      if (!leg.error) detail.append(element('div', 'caption', Math.round(leg.km) + ' กม.'));
+      row.append(route, detail);
+      list.append(row);
+    }
+    const total = plan.legs.every(leg => Number.isFinite(leg.minutes))
+      ? travelTime(plan.legs.reduce((sum, leg) => sum + leg.minutes, 0))
+      : 'ยังรวมเวลาไม่ได้ เนื่องจากข้อมูลเส้นทางไม่ครบ';
+    output.replaceChildren();
+    if (plan.sharedAirport) output.append(element('p', 'caption',
+      'ทั้งสองจังหวัดใช้' + travelAirportLabel(plan.sharedAirport) + ' แห่งเดียวกัน จึงแสดงเส้นทางขับรถตลอดทาง'));
+    output.append(list, element('p', 'travel-total', 'เวลารวมโดยประมาณ · ' + total));
+    submit.disabled = false;
+  });
 }
 
 function latestFirst(a, b) {
@@ -850,7 +1105,7 @@ function renderOverview(target) {
   ]));
 
   const grid = element('div', 'portal-grid');
-  Object.keys(ENTRY_FIELDS).forEach(key => {
+  Object.keys(SECTIONS).filter(key => key !== 'home').forEach(key => {
     const section = SECTIONS[key];
     const card = button('portal-card' + (key === 'profile' ? ' featured' : ''), undefined, () => navigate(key));
     const badge = element('span', 'portal-icon');
