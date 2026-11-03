@@ -235,6 +235,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .calendar-tag.duty-front { background: #d3f2ed; color: #075c51; }
 .calendar-tag.duty-command { background: #dcdffb; color: #292e82; }
 .calendar-tag.duty-tactical { background: #e8e5dd; color: #4c4235; }
+.calendar-tag.high-council { background: #f6e7ba; color: #644a15; }
 .calendar-tag.foreign-mission { background: #f8dced; color: #852458; }
 .calendar-tag.domestic { background: #faedda; color: #764917; }
 .calendar-tag.international { background: #e2eefb; color: #23578d; }
@@ -354,7 +355,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 </dialog>
 <dialog id="reportDialog" aria-labelledby="reportTitle">
   <div class="dialog-head">
-    <div><div class="kicker">PROVINCIAL REPORT</div><h2 id="reportTitle">รายการรายงาน 77</h2></div>
+    <div><div class="kicker">PROVINCIAL REPORT</div><h2 id="reportTitle">รายงานภารกิจวางกำลังฟินิกซ์</h2></div>
     <button id="closeReport" class="close" type="button" aria-label="ปิดรายการรายงาน">×</button>
   </div>
   <div id="reportModes" class="filters" aria-label="ประเภทรายงาน"></div>
@@ -379,7 +380,7 @@ const SECTIONS = {
   home: { label: 'เมนูหลัก', english: 'COMMAND OVERVIEW' },
   profile: { label: 'ข้อมูลผู้บัญชาการ', english: 'SUPREME COMMANDER PROFILE', description: 'ข้อมูลประจำตัว ตำแหน่ง และหน้าที่รับผิดชอบ' },
   calendar: { label: 'ตารางปฏิทิน', english: 'COMMAND CALENDAR', description: 'ดูตารางงานรายวันและเพิ่มรายการตามวันที่' },
-  field77: { label: '	ภารกิจวางกำลังฟินิกซ์', english: 'PROVINCIAL TRAVEL', description: 'ดูรายการเดินทางแยกตามภาค จังหวัด และอำเภอหรือเขต' },
+  field77: { label: 'ภารกิจวางกำลังฟินิกซ์', english: 'PHOENIX DEPLOYMENT MISSION', description: 'ดูภารกิจแยกตามภาค จังหวัด และอำเภอหรือเขต' },
 };
 const ENTRY_FIELDS = {
   profile: [['title', 'หัวข้อข้อมูล'], ['details', 'รายละเอียด']],
@@ -404,6 +405,7 @@ const CALENDAR_TYPES = {
   'เดินทางในประเทศ': 'domestic',
   'เดินทางต่างประเทศ': 'international',
   'ภารกิจต่างประเทศ': 'foreign-mission',
+  'สภาสูงสุดฟินิกซ์': 'high-council',
   'งดปฏิบัติหน้าที่': 'off-duty',
 };
 const CALENDAR_DUTY_TYPES = ['ประจำการส่วนหน้า', 'ประจำการสั่งการ', 'ประจำการค่ายยุทธวิธี'];
@@ -1090,7 +1092,7 @@ function renderAreas(target) {
   const area = AREAS[province];
   const entries = data?.field77 || [];
   const crumb = element('nav', 'area-crumb');
-  crumb.setAttribute('aria-label', 'ตำแหน่งในภารกิจ 77');
+  crumb.setAttribute('aria-label', 'ตำแหน่งในภารกิจวางกำลังฟินิกซ์');
   crumb.append(button('secondary-action', 'ทุกภาค', () => changeArea(-1)));
   if (region >= 0) crumb.append(button('secondary-action', REGIONS[region][0], () => changeArea(region)));
   if (area) crumb.append(button('secondary-action', area.name, () => changeArea(region, province)));
@@ -1132,7 +1134,7 @@ function renderAreas(target) {
     const panel = element('section', 'panel area-records');
     const scoped = entries.filter(entry => entry.province === province && !entry.district)
       .reverse().sort(latestFirst);
-    panel.append(element('h3', 'panel-head', 'รายการเดินทางระดับจังหวัด'));
+    panel.append(element('h3', 'panel-head', 'ภารกิจวางกำลังฟินิกซ์ระดับจังหวัด'));
     if (data) {
       const result = areaResult(province);
       if (result) panel.append(element('div', 'list-head ' + areaResultClass(result), result));
@@ -1372,7 +1374,7 @@ function openAreaSummary() {
   districtPanel.append(picker, result);
   updateResults();
   body.replaceChildren(controls, provincePanel, districtPanel);
-  byId('summaryTitle').textContent = 'สรุปการเดินทาง · ' + area.name;
+  byId('summaryTitle').textContent = 'สรุปภารกิจวางกำลังฟินิกซ์ · ' + area.name;
   showTab(0);
   byId('summaryDialog').showModal();
 }
