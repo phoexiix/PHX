@@ -806,20 +806,15 @@ function renderOverview(target) {
     element('span', 'calendar-tag', data ? 'ไม่มีรายการในปฏิทิน' : isLoading ? 'กำลังโหลดสถานะ' : 'ยังไม่มีข้อมูลสถานะ'),
   ]));
 
-  const counts = data ? {
-    profile: SECTIONS.profile.description,
-    calendar: data.calendar.length + ' รายการในปฏิทิน',
-    field77: 'มีบันทึก ' + new Set(data.field77.map(entry => entry.province).filter(code => AREAS[code])).size + ' จาก 77 จังหวัด',
-  } : null;
   const grid = element('div', 'portal-grid');
-  Object.entries(ENTRY_FIELDS).forEach(([key]) => {
+  Object.keys(ENTRY_FIELDS).forEach(key => {
     const section = SECTIONS[key];
     const card = button('portal-card' + (key === 'profile' ? ' featured' : ''), undefined, () => navigate(key));
     const badge = element('span', 'portal-icon');
     badge.append(icon(key));
     card.append(badge, element('span', 'portal-meta', 'เปิดเมนู →'),
       element('strong', '', section.label),
-      element('span', 'caption', counts ? counts[key] : section.description));
+      element('span', 'caption', section.description));
     grid.append(card);
   });
   target.append(grid);
@@ -1054,6 +1049,9 @@ function appendEntries(panel, key, entries, emptyText) {
         .filter(Boolean).join(' · ');
     summary.append(element('strong', '', entryDisplayTitle(key, entry)));
     if (subtitle) summary.append(element('span', 'caption', subtitle));
+    if (key === 'calendar' && entry.details?.trim()) {
+      summary.append(element('span', 'caption detail', entry.details));
+    }
     const badge = key === 'calendar' && entry.category
       ? element('span', 'calendar-tag ' + calendarCategory(entry.category), calendarTypeLabel(entry.category))
       : entry.status ? chip(entry.status) : element('span');
