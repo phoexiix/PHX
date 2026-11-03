@@ -92,9 +92,15 @@ h3 { font-size: 17px; margin: 4px 0 0; }
 .item.profile-item { grid-template-columns: minmax(0, 1fr); }
 .profile-item .caption { white-space: pre-wrap; }
 .office-structure { overflow-x: auto; padding: 16px; }
-.office-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; min-width: 620px; }
+.office-grid {
+  --office-gap: 10px;
+  --office-card-width: calc((100% - 4 * var(--office-gap)) / 5);
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--office-gap); min-width: 620px;
+}
+.office-leadership-row { grid-column: 1 / -1; display: flex; justify-content: center; gap: var(--office-gap); }
+.office-leadership-row .office-card { flex: 0 0 var(--office-card-width); min-width: 0; }
 .office-card { display: grid; align-content: start; gap: 6px; min-height: 88px; overflow-wrap: anywhere; }
-.office-card.commander { grid-column: 1 / -1; justify-self: center; width: calc((100% - 40px) / 5); border-color: #b88b55; }
+.office-card.commander { border-color: #b88b55; }
 .office-card .caption { white-space: normal; }
 .item + .item { border-top: 1px solid #eeece6; }
 .item:focus-visible { outline-offset: -3px; }
@@ -1952,7 +1958,7 @@ function renderSection(target) {
   const legacy = data.profile.filter(entry => !entry.officePosition);
   const legacyName = legacy.find(entry => /^ชื่อ[–— -]+นามสกุล$/.test(entry.title))?.details;
 
-  function appendPerson(position, entry) {
+  function appendPerson(position, entry, row = grid) {
     const commander = position === 'commander';
     const card = button('area-card office-card' + (commander ? ' commander' : ''), undefined, () => {
       if (entry) showDetail('profile', entry);
@@ -1961,12 +1967,21 @@ function renderSection(target) {
     });
     card.append(element('strong', '', OFFICE_POSITIONS[position]),
       element('span', 'caption', entry?.title || (commander && legacyName) || 'ยังไม่ได้เพิ่มข้อมูล'));
-    grid.append(card);
+    row.append(card);
   }
 
-  Object.keys(OFFICE_POSITIONS).filter(position => position !== 'staff').forEach(position => {
-    appendPerson(position, data.profile.find(entry => entry.officePosition === position));
-  });
+  const leadershipRows = [
+    ['commander'],
+    ['secretary-1', 'secretary-2'],
+    ['deputy-1', 'deputy-2', 'deputy-3'],
+  ];
+  for (const positions of leadershipRows) {
+    const row = element('div', 'office-leadership-row');
+    for (const position of positions) {
+      appendPerson(position, data.profile.find(entry => entry.officePosition === position), row);
+    }
+    grid.append(row);
+  }
   data.profile.filter(entry => entry.officePosition === 'staff').forEach(entry => appendPerson('staff', entry));
   frame.append(grid);
   panel.append(frame);
