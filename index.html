@@ -43,6 +43,9 @@ button:disabled { cursor: wait; opacity: .65; }
 .hero .kicker { display: flex; align-items: center; gap: 10px; color: var(--gold); }
 .hero .kicker::before { content: ""; width: 25px; height: 1px; background: currentColor; }
 h1 { font-size: clamp(28px, 4vw, 48px); margin: 11px 0 7px; line-height: 1.22; letter-spacing: -.025em; }
+.hero-schedule { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.hero-date { padding: 4px 9px; border: 1px solid #ffffff40; border-radius: 5px; color: #f5e5c7; font-size: 12px; }
+.hero-schedule .calendar-tag { font-size: 12px; }
 .hero p { margin: 0 0 21px; color: #e0e8ed; font-size: 15px; }
 .mast-actions { display: flex; align-items: center; gap: 16px; }
 .refresh { display: flex; align-items: center; gap: 7px; border: 1px solid #ffffff3b; border-radius: 6px; padding: 7px 10px; color: white; background: transparent; }
@@ -209,6 +212,10 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .calendar-day .calendar-tag { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .calendar-tag.abroad { background: #efe6fa; color: #653a88; }
 .calendar-tag.base { background: #e3f0e8; color: #285e44; }
+.calendar-tag.duty-front { background: #d3f2ed; color: #075c51; }
+.calendar-tag.duty-command { background: #dcdffb; color: #292e82; }
+.calendar-tag.duty-tactical { background: #e8e5dd; color: #4c4235; }
+.calendar-tag.foreign-mission { background: #f8dced; color: #852458; }
 .calendar-tag.domestic { background: #faedda; color: #764917; }
 .calendar-tag.international { background: #e2eefb; color: #23578d; }
 .calendar-tag.off-duty { background: #fbe7e8; color: #8e2634; }
@@ -267,6 +274,10 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
     <div class="kicker">SUPREME COMMANDER / PRIVATE PORTAL</div>
     <h1 id="siteTitle">ผู้บัญชาการสูงสุด</h1>
     <p>พื้นที่ส่วนตัวสำหรับดูข้อมูลและติดตามงานของผู้บัญชาการสูงสุด</p>
+    <div class="hero-schedule" aria-label="วันที่และสถานะตามปฏิทิน">
+      <time id="homeDate" class="hero-date"></time>
+      <span id="homeSchedule" class="hero-schedule" aria-live="polite"></span>
+    </div>
   </div>
 </section>
 <div class="workspace shell">
@@ -355,10 +366,15 @@ const STATUS_OPTIONS = {
 const CALENDAR_TYPES = {
   'พำนักต่างประเทศ': 'abroad',
   'ประจำการฟินิกซ์': 'base',
+  'ประจำการส่วนหน้า': 'duty-front',
+  'ประจำการสั่งการ': 'duty-command',
+  'ประจำการค่ายยุทธวิธี': 'duty-tactical',
   'เดินทางในประเทศ': 'domestic',
   'เดินทางต่างประเทศ': 'international',
+  'ภารกิจต่างประเทศ': 'foreign-mission',
   'งดปฏิบัติหน้าที่': 'off-duty',
 };
+const CALENDAR_DUTY_TYPES = ['ประจำการส่วนหน้า', 'ประจำการสั่งการ', 'ประจำการค่ายยุทธวิธี'];
 const MONTH_FORMAT = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const CLOSED = ['เสร็จสิ้น', 'ยกเลิก'];
 
@@ -640,6 +656,19 @@ function isActive(entry) {
 }
 
 function renderOverview(target) {
+  const today = data?.today || dateKey(new Date());
+  const date = byId('homeDate');
+  date.dateTime = today;
+  date.textContent = formatDate(today);
+  const schedule = byId('homeSchedule');
+  const categories = new Set((data?.calendar || [])
+    .filter(entry => isDate(entry.date) && entry.date <= today && calendarEndDate(entry) >= today)
+    .map(entry => entry.category).filter(Boolean));
+  const statuses = [...categories].map(category => element('span', 'calendar-tag ' + calendarCategory(category), category));
+  schedule.replaceChildren(...(statuses.length ? statuses : [
+    element('span', 'calendar-tag', data ? 'ไม่มีรายการในปฏิทิน' : isLoading ? 'กำลังโหลดสถานะ' : 'ยังไม่มีข้อมูลสถานะ'),
+  ]));
+
   const counts = data ? {
     profile: SECTIONS.profile.description,
     calendar: data.calendar.length + ' รายการในปฏิทิน',
@@ -1248,9 +1277,11 @@ function openEntryForm(key = currentSection, existing = null) {
   if (key === 'field77') appendAreaFields(fields, existing || areaView);
   for (const [field, title] of ENTRY_FIELDS[key]) {
     const label = element('label', '', title);
-    const choices = field === 'category' ? Object.keys(CALENDAR_TYPES) : field === 'status' ? STATUS_OPTIONS[key] : null;
+    const choices = field === 'category' ? Object.keys(CALENDAR_TYPES).filter(type => !CALENDAR_DUTY_TYPES.includes(type))
+      : field === 'status' ? STATUS_OPTIONS[key] : null;
     const control = element(choices ? 'select' : field === 'details' ? 'textarea' : 'input');
-    const value = existing?.[field] ?? (field === 'date' ? (key === 'calendar' ? selectedCalendarDate || data.today : data.today) : '');
+    let value = existing?.[field] ?? (field === 'date' ? (key === 'calendar' ? selectedCalendarDate || data.today : data.today) : '');
+    if (field === 'category' && CALENDAR_DUTY_TYPES.includes(value)) value = 'ประจำการฟินิกซ์';
     control.name = field;
     if (choices) {
       control.append(new Option(field === 'category' ? 'เลือกประเภทตารางงาน' : 'ไม่ระบุ', ''));
@@ -1267,6 +1298,19 @@ function openEntryForm(key = currentSection, existing = null) {
     control.required = field === 'title' || (key === 'calendar' && (field === 'date' || field === 'category'));
     label.append(control);
     fields.append(label);
+    if (field === 'category') {
+      const dutyLabel = element('label', '', 'จุดประจำการ');
+      const duty = element('select');
+      duty.name = 'duty';
+      duty.append(new Option('ประจำการ (ไม่ระบุ)', ''));
+      CALENDAR_DUTY_TYPES.forEach(type => duty.append(new Option(type, type)));
+      duty.value = CALENDAR_DUTY_TYPES.includes(existing?.category) ? existing.category : '';
+      dutyLabel.append(duty);
+      fields.append(dutyLabel);
+      const toggleDuty = () => { dutyLabel.hidden = control.value !== 'ประจำการฟินิกซ์'; };
+      control.addEventListener('change', toggleDuty);
+      toggleDuty();
+    }
   }
 
   if (key === 'calendar') {
@@ -1350,6 +1394,8 @@ function submitEntry(event) {
     return;
   }
   if (section === 'calendar') {
+    if (fields.category === 'ประจำการฟินิกซ์' && fields.duty) fields.category = fields.duty;
+    delete fields.duty;
     if (!isDate(fields.date) || (fields.endDate && !isDate(fields.endDate))) {
       entryError('กรุณาระบุวันที่ให้ถูกต้อง');
       return;
