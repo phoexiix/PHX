@@ -103,16 +103,29 @@ h3 { font-size: 17px; margin: 4px 0 0; }
   min-width: 0;
 }
 #officeLayoutDialog { width: min(690px, calc(100% - 28px)); }
-.office-layout-move { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)) auto; gap: 8px; align-items: end; }
+.office-layout-help { margin: 0; line-height: 1.5; }
 .office-layout-rows { display: grid; gap: 8px; }
-.office-layout-row { padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.office-layout-row { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
 .office-layout-row-head { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
-.office-layout-row-head label { width: 108px; }
-.office-layout-row ol { margin-block: 8px 0; padding-inline-start: 26px; }
-.office-layout-row p { margin-block: 8px 0; }
-@media (max-width: 530px) {
-  .office-layout-move { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .office-layout-move > :first-child { grid-column: 1 / -1; }
+.office-layout-row-head label { width: 94px; }
+.office-layout-row-head strong { align-self: center; margin-inline-end: auto; }
+.office-layout-track { display: flex; align-items: stretch; overflow-x: auto; margin-top: 10px; padding: 3px; }
+.office-layout-card {
+  flex: 0 0 clamp(78px, 15%, 108px); min-width: 0; min-height: 62px; padding: 6px;
+  text-align: start; font-size: 12px; overflow-wrap: anywhere; cursor: grab;
+}
+.office-layout-card[aria-pressed="true"] { background: #e7f1f8; border-color: #496b82; }
+.office-layout-slot {
+  flex: 0 0 24px; min-height: 38px; padding: 0;
+  border: 1px dashed transparent; border-radius: 5px; background: transparent; color: #34556e;
+}
+.office-layout-slot:disabled { opacity: 0; }
+.office-layout-slot:not(:disabled) { border-color: #7592a7; background: #f0f6fb; }
+.office-layout-slot:not(:disabled):hover, .office-layout-slot.drop-active { background: #dbeaf6; border-color: #34556e; }
+.office-layout-slot.empty { flex: 1 0 auto; border-color: var(--line); }
+.office-layout-slot.empty:disabled { opacity: 1; color: var(--muted); }
+@media (pointer: coarse) {
+  .office-layout-slot { flex-basis: 36px; }
 }
 .office-card { display: grid; align-content: start; gap: 6px; min-height: 88px; overflow-wrap: anywhere; }
 .office-card.commander { border-color: #b88b55; }
@@ -462,12 +475,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 <dialog id="officeLayoutDialog" aria-labelledby="officeLayoutTitle">
   <div class="dialog-head"><h2 id="officeLayoutTitle">จัดผังข้อมูลสำนัก</h2></div>
   <form id="officeLayoutForm" class="entry-form">
-    <div class="office-layout-move">
-      <label>การ์ดที่ต้องการย้าย<select id="officeLayoutCard"></select></label>
-      <label>แถวปลายทาง<select id="officeLayoutDestination"></select></label>
-      <label>ลำดับในแถว<select id="officeLayoutOrder"></select></label>
-      <button id="officeLayoutMove" class="secondary-action" type="button">ย้ายการ์ด</button>
-    </div>
+    <p id="officeLayoutHelp" class="caption office-layout-help" role="status">ลากการ์ดไปที่ช่อง + หรือกดการ์ดหนึ่งครั้งแล้วกด + ตรงตำแหน่งที่จะวาง</p>
     <div id="officeLayoutRows" class="office-layout-rows"></div>
     <button id="officeLayoutAdd" class="secondary-action" type="button">+ เพิ่มแถว</button>
     <p id="officeLayoutError" class="notice error" role="alert" hidden></p>
@@ -2060,10 +2068,7 @@ function openOfficeLayout() {
   const dialog = byId('officeLayoutDialog');
   const form = byId('officeLayoutForm');
   const list = byId('officeLayoutRows');
-  const cardSelect = byId('officeLayoutCard');
-  const destination = byId('officeLayoutDestination');
-  const order = byId('officeLayoutOrder');
-  const move = byId('officeLayoutMove');
+  const help = byId('officeLayoutHelp');
   const add = byId('officeLayoutAdd');
   const save = byId('officeLayoutSave');
   const cancel = byId('officeLayoutCancel');
@@ -2081,34 +2086,47 @@ function openOfficeLayout() {
     error.hidden = !message;
   };
 
-  function updateOrder() {
-    const index = Number(destination.value);
-    const target = rows[index];
-    const alreadyThere = target.cards.includes(cardSelect.value);
-    const count = target.cards.length + (alreadyThere ? 0 : 1);
-    move.disabled = count > target.limit;
-    order.disabled = move.disabled;
-    order.replaceChildren(...Array.from({ length: Math.min(count, target.limit) },
-      (_, i) => new Option(String(i + 1), String(i))));
+  let selectedKey = '';
+  let draggedKey = '';
+  const cardButtons = new Map();
+  const slots = [];
+  const instructions = 'ลากการ์ดไปที่ช่อง + หรือกดการ์ดหนึ่งครั้งแล้วกด + ตรงตำแหน่งที่จะวาง';
+
+  function canPlace(row, key) {
+    return Boolean(key) && (row.cards.includes(key) || row.cards.length < row.limit);
   }
 
-  function updateDestination(targetIndex) {
-    destination.replaceChildren(...rows.map((row, i) =>
-      new Option('แถว ' + (i + 1) + ' (' + row.cards.length + '/' + row.limit + ')', String(i))));
-    destination.value = String(Math.min(targetIndex, rows.length - 1));
-    updateOrder();
+  function updateTargets() {
+    const key = draggedKey || selectedKey;
+    help.textContent = key ? 'กำลังย้าย ' + cardLabel(key) + ' · เลือกช่อง + เพื่อวาง' : instructions;
+    cardButtons.forEach((control, card) => control.setAttribute('aria-pressed', String(card === key)));
+    slots.forEach(({ control, row }) => {
+      control.disabled = !canPlace(row, key);
+      control.classList.remove('drop-active');
+    });
   }
 
-  function renderDraft(targetIndex = 0) {
-    const selectedCard = cardSelect.value;
-    cardSelect.replaceChildren(...rows.flatMap(row => row.cards.map(key => new Option(cardLabel(key), key))));
-    if (cards.has(selectedCard)) cardSelect.value = selectedCard;
-    updateDestination(targetIndex);
+  function placeCard(key, row, index) {
+    if (isSaving || !canPlace(row, key)) return;
+    const source = rows.find(item => item.cards.includes(key));
+    if (!source) return;
+    const oldIndex = source.cards.indexOf(key);
+    source.cards.splice(oldIndex, 1);
+    row.cards.splice(source === row && oldIndex < index ? index - 1 : index, 0, key);
+    selectedKey = draggedKey = '';
+    setError('');
+    renderDraft();
+    cardButtons.get(key)?.focus({ preventScroll: true });
+  }
+
+  function renderDraft() {
+    cardButtons.clear();
+    slots.length = 0;
     add.disabled = rows.length >= OFFICE_MAX_ROWS;
-
     list.replaceChildren(...rows.map((row, i) => {
       const block = element('section', 'office-layout-row');
       const head = element('div', 'office-layout-row-head');
+      const heading = element('strong', '', 'แถว ' + (i + 1) + ' · ' + row.cards.length + '/' + row.limit + ' คน');
       const label = element('label', '', 'จำนวนสูงสุด');
       const limit = element('input');
       limit.type = 'number';
@@ -2120,50 +2138,91 @@ function openOfficeLayout() {
         const count = Number(limit.value);
         if (!Number.isInteger(count) || count < Number(limit.min) || count > OFFICE_MAX_LIMIT) {
           limit.value = row.limit;
-          setError('กำหนดจำนวนได้ตั้งแต่ ' + limit.min + ' ถึง ' + OFFICE_MAX_LIMIT + ' คนในแถวนี้');
+          setError('แถวนี้กำหนดได้ ' + limit.min + ' ถึง ' + OFFICE_MAX_LIMIT + ' คน');
           return;
         }
         row.limit = count;
+        heading.textContent = 'แถว ' + (i + 1) + ' · ' + row.cards.length + '/' + row.limit + ' คน';
         setError('');
-        updateDestination(Number(destination.value));
+        updateTargets();
       };
       label.append(limit);
+
       const moveRow = (label, offset) => {
         const action = button('secondary-action', label, () => {
           const next = i + offset;
           [rows[i], rows[next]] = [rows[next], rows[i]];
-          renderDraft(next);
+          renderDraft();
         });
         action.disabled = !rows[i + offset];
         action.setAttribute('aria-label', label + ' แถว ' + (i + 1));
         return action;
       };
-      head.append(element('strong', '', 'แถว ' + (i + 1)), label, moveRow('ขึ้น', -1), moveRow('ลง', 1));
+      head.append(heading, label, moveRow('ขึ้น', -1), moveRow('ลง', 1));
       if (!row.cards.length && rows.length > 1) head.append(button('secondary-action', 'ลบแถวว่าง', () => {
         rows.splice(i, 1);
-        renderDraft(i);
+        renderDraft();
       }));
-      const items = row.cards.length ? element('ol') : element('p', 'caption', 'แถวว่าง');
-      row.cards.forEach(key => items.append(element('li', '', cardLabel(key))));
-      block.append(head, items);
+
+      const track = element('div', 'office-layout-track');
+      function appendSlot(index) {
+        const empty = !row.cards.length;
+        const slot = button('office-layout-slot' + (empty ? ' empty' : ''), empty ? '+ วางในแถวนี้' : '+',
+          () => placeCard(selectedKey, row, index));
+        slot.setAttribute('aria-label', 'วางที่แถว ' + (i + 1) + ' ตำแหน่ง ' + (index + 1));
+        slot.addEventListener('dragover', event => {
+          if (!canPlace(row, draggedKey)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          slot.classList.add('drop-active');
+        });
+        slot.addEventListener('dragleave', () => slot.classList.remove('drop-active'));
+        slot.addEventListener('drop', event => {
+          if (!canPlace(row, draggedKey)) return;
+          event.preventDefault();
+          placeCard(draggedKey, row, index);
+        });
+        slots.push({ control: slot, row });
+        track.append(slot);
+      }
+      row.cards.forEach((key, index) => {
+        appendSlot(index);
+        const { position, entry } = cards.get(key);
+        const card = button('area-card office-layout-card', undefined, () => {
+          selectedKey = selectedKey === key ? '' : key;
+          updateTargets();
+        });
+        card.append(element('strong', '', OFFICE_POSITIONS[position]));
+        if (entry) card.append(element('span', '', entry.title));
+        card.draggable = true;
+        card.addEventListener('dragstart', event => {
+          if (isSaving || !event.dataTransfer) {
+            event.preventDefault();
+            return;
+          }
+          draggedKey = key;
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', key);
+          updateTargets();
+        });
+        card.addEventListener('dragend', () => {
+          draggedKey = '';
+          updateTargets();
+        });
+        cardButtons.set(key, card);
+        track.append(card);
+      });
+      appendSlot(row.cards.length);
+      block.append(head, track);
       return block;
     }));
+    updateTargets();
   }
 
-  cardSelect.onchange = destination.onchange = updateOrder;
-  move.onclick = () => {
-    if (move.disabled) return;
-    const key = cardSelect.value;
-    const source = rows.find(row => row.cards.includes(key));
-    const index = Number(destination.value);
-    source.cards.splice(source.cards.indexOf(key), 1);
-    rows[index].cards.splice(Number(order.value), 0, key);
-    setError('');
-    renderDraft(index);
-  };
   add.onclick = () => {
     rows.push({ limit: OFFICE_DEFAULT_LIMIT, cards: [] });
-    renderDraft(rows.length - 1);
+    renderDraft();
+    list.lastElementChild?.scrollIntoView({ block: 'nearest' });
   };
   cancel.onclick = () => dialog.close();
   form.onsubmit = async event => {
