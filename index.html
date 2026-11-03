@@ -94,11 +94,26 @@ h3 { font-size: 17px; margin: 4px 0 0; }
 .office-structure { overflow-x: auto; padding: 16px; }
 .office-grid {
   --office-gap: 10px;
-  --office-card-width: calc((100% - 4 * var(--office-gap)) / 5);
-  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--office-gap); min-width: 620px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--office-gap);
+  min-width: calc(var(--office-max-columns, 5) * 126px - var(--office-gap));
 }
 .office-card-row { display: flex; justify-content: center; gap: var(--office-gap); }
-.office-card-row .office-card { flex: 0 0 var(--office-card-width); min-width: 0; }
+.office-card-row .office-card {
+  flex: 0 0 calc((100% - (var(--office-columns, 5) - 1) * var(--office-gap)) / var(--office-columns, 5));
+  min-width: 0;
+}
+#officeLayoutDialog { width: min(690px, calc(100% - 28px)); }
+.office-layout-move { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)) auto; gap: 8px; align-items: end; }
+.office-layout-rows { display: grid; gap: 8px; }
+.office-layout-row { padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.office-layout-row-head { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
+.office-layout-row-head label { width: 108px; }
+.office-layout-row ol { margin-block: 8px 0; padding-inline-start: 26px; }
+.office-layout-row p { margin-block: 8px 0; }
+@media (max-width: 530px) {
+  .office-layout-move { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .office-layout-move > :first-child { grid-column: 1 / -1; }
+}
 .office-card { display: grid; align-content: start; gap: 6px; min-height: 88px; overflow-wrap: anywhere; }
 .office-card.commander { border-color: #b88b55; }
 .item + .item { border-top: 1px solid #eeece6; }
@@ -444,6 +459,24 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
     </div>
   </form>
 </dialog>
+<dialog id="officeLayoutDialog" aria-labelledby="officeLayoutTitle">
+  <div class="dialog-head"><h2 id="officeLayoutTitle">จัดผังข้อมูลสำนัก</h2></div>
+  <form id="officeLayoutForm" class="entry-form">
+    <div class="office-layout-move">
+      <label>การ์ดที่ต้องการย้าย<select id="officeLayoutCard"></select></label>
+      <label>แถวปลายทาง<select id="officeLayoutDestination"></select></label>
+      <label>ลำดับในแถว<select id="officeLayoutOrder"></select></label>
+      <button id="officeLayoutMove" class="secondary-action" type="button">ย้ายการ์ด</button>
+    </div>
+    <div id="officeLayoutRows" class="office-layout-rows"></div>
+    <button id="officeLayoutAdd" class="secondary-action" type="button">+ เพิ่มแถว</button>
+    <p id="officeLayoutError" class="notice error" role="alert" hidden></p>
+    <div class="entry-actions">
+      <button id="officeLayoutCancel" type="button" class="secondary-action">ยกเลิก</button>
+      <button id="officeLayoutSave" type="submit" class="primary-action">บันทึกผัง</button>
+    </div>
+  </form>
+</dialog>
 <dialog id="entryDialog" aria-labelledby="entryTitle">
   <div class="dialog-head">
     <div><div class="kicker">NEW ENTRY</div><h2 id="entryTitle"></h2></div>
@@ -505,6 +538,10 @@ const OFFICE_POSITIONS = {
   'deputy-3': 'รองเลขานุการ คนที่ 3',
   staff: 'บุคลากรสำนัก',
 };
+const OFFICE_DEFAULT_ROWS = [['commander'], ['secretary-1', 'secretary-2'], ['deputy-1', 'deputy-2', 'deputy-3']];
+const OFFICE_DEFAULT_LIMIT = 5;
+const OFFICE_MAX_LIMIT = 12;
+const OFFICE_MAX_ROWS = 100;
 const OFFICE_FORM_FIELDS = [['officePosition', 'ตำแหน่ง'], ['title', 'ชื่อ–นามสกุล'], ['details', 'รายละเอียด (ไม่บังคับ)']];
 const CALENDAR_FORM_FIELDS = [
   ['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'],
@@ -812,7 +849,8 @@ function connection(state, label) {
 
 function refresh() {
   if (isLoading || isSaving || byId('entryDialog').open || byId('reportDialog').open ||
-      byId('calendarDeleteDialog').open || byId('simulationDialog').open || byId('secretSendDialog')?.open) return;
+      byId('calendarDeleteDialog').open || byId('officeLayoutDialog').open ||
+      byId('simulationDialog').open || byId('secretSendDialog')?.open) return;
   if (isPreview) {
     if (!data) {
       data = sampleData(new Date());
@@ -1949,9 +1987,39 @@ function moveCalendarMonth(offset) {
   byId(offset < 0 ? 'calendarPrevious' : 'calendarNext').focus();
 }
 
+function officeCardEntries() {
+  const cards = new Map(OFFICE_DEFAULT_ROWS.flat().map(position => [
+    position, { position, entry: data.profile.find(entry => entry.officePosition === position) },
+  ]));
+  for (const entry of data.profile.filter(entry => entry.officePosition === 'staff')) {
+    const key = entry.id ? 'staff:' + entry.id : 'staff-row:' + entry.row;
+    cards.set(key, { position: 'staff', entry });
+  }
+  return cards;
+}
+
+function officeLayoutRows(cards) {
+  const available = new Set(cards.keys());
+  const savedRows = data.officeLayout?.rows ?? OFFICE_DEFAULT_ROWS.map(cards => ({ limit: OFFICE_DEFAULT_LIMIT, cards }));
+  const rows = savedRows.map(row => ({ limit: row.limit, cards: row.cards.filter(key => available.delete(key)) }));
+  for (const key of available) {
+    let row = rows.at(-1);
+    if (!row || !row.cards.length || row.cards.length >= row.limit ||
+        row.cards.some(item => cards.get(item).position !== 'staff')) {
+      row = { limit: OFFICE_DEFAULT_LIMIT, cards: [] };
+      rows.push(row);
+    }
+    row.cards.push(key);
+  }
+  return rows;
+}
+
 function renderSection(target) {
   const panel = element('section', 'panel');
-  panel.append(element('h3', 'panel-head', 'โครงสร้างสำนัก'));
+  const heading = element('div', 'panel-head');
+  heading.append(element('strong', '', 'โครงสร้างสำนัก'),
+    button('secondary-action', 'จัดผัง', openOfficeLayout));
+  panel.append(heading);
   const frame = element('div', 'office-structure');
   const grid = element('div', 'office-grid');
   const legacy = data.profile.filter(entry => !entry.officePosition);
@@ -1970,27 +2038,164 @@ function renderSection(target) {
     row.append(card);
   }
 
-  const leadershipRows = [
-    ['commander'],
-    ['secretary-1', 'secretary-2'],
-    ['deputy-1', 'deputy-2', 'deputy-3'],
-  ];
-  for (const positions of leadershipRows) {
+  const cards = officeCardEntries();
+  const rows = officeLayoutRows(cards).filter(row => row.cards.length);
+  grid.style.setProperty('--office-max-columns', Math.max(OFFICE_DEFAULT_LIMIT, ...rows.map(row => row.limit)));
+  for (const config of rows) {
     const row = element('div', 'office-card-row');
-    for (const position of positions) {
-      appendPerson(position, data.profile.find(entry => entry.officePosition === position), row);
+    row.style.setProperty('--office-columns', Math.max(OFFICE_DEFAULT_LIMIT, config.limit));
+    for (const key of config.cards) {
+      const { position, entry } = cards.get(key);
+      appendPerson(position, entry, row);
     }
-    grid.append(row);
-  }
-  const staff = data.profile.filter(entry => entry.officePosition === 'staff');
-  for (let start = 0; start < staff.length; start += 5) {
-    const row = element('div', 'office-card-row');
-    staff.slice(start, start + 5).forEach(entry => appendPerson('staff', entry, row));
     grid.append(row);
   }
   frame.append(grid);
   panel.append(frame);
   target.append(panel);
+}
+
+function openOfficeLayout() {
+  if (isLoading || isSaving || !data) return;
+  const dialog = byId('officeLayoutDialog');
+  const form = byId('officeLayoutForm');
+  const list = byId('officeLayoutRows');
+  const cardSelect = byId('officeLayoutCard');
+  const destination = byId('officeLayoutDestination');
+  const order = byId('officeLayoutOrder');
+  const move = byId('officeLayoutMove');
+  const add = byId('officeLayoutAdd');
+  const save = byId('officeLayoutSave');
+  const cancel = byId('officeLayoutCancel');
+  const error = byId('officeLayoutError');
+  const cards = officeCardEntries();
+  const rows = officeLayoutRows(cards);
+  const previousRevision = data.officeLayout?.revision || '';
+
+  const cardLabel = key => {
+    const { position, entry } = cards.get(key);
+    return entry ? OFFICE_POSITIONS[position] + ' · ' + entry.title : OFFICE_POSITIONS[position];
+  };
+  const setError = message => {
+    error.textContent = message;
+    error.hidden = !message;
+  };
+
+  function updateOrder() {
+    const index = Number(destination.value);
+    const target = rows[index];
+    const alreadyThere = target.cards.includes(cardSelect.value);
+    const count = target.cards.length + (alreadyThere ? 0 : 1);
+    move.disabled = count > target.limit;
+    order.disabled = move.disabled;
+    order.replaceChildren(...Array.from({ length: Math.min(count, target.limit) },
+      (_, i) => new Option(String(i + 1), String(i))));
+  }
+
+  function updateDestination(targetIndex) {
+    destination.replaceChildren(...rows.map((row, i) =>
+      new Option('แถว ' + (i + 1) + ' (' + row.cards.length + '/' + row.limit + ')', String(i))));
+    destination.value = String(Math.min(targetIndex, rows.length - 1));
+    updateOrder();
+  }
+
+  function renderDraft(targetIndex = 0) {
+    const selectedCard = cardSelect.value;
+    cardSelect.replaceChildren(...rows.flatMap(row => row.cards.map(key => new Option(cardLabel(key), key))));
+    if (cards.has(selectedCard)) cardSelect.value = selectedCard;
+    updateDestination(targetIndex);
+    add.disabled = rows.length >= OFFICE_MAX_ROWS;
+
+    list.replaceChildren(...rows.map((row, i) => {
+      const block = element('section', 'office-layout-row');
+      const head = element('div', 'office-layout-row-head');
+      const label = element('label', '', 'จำนวนสูงสุด');
+      const limit = element('input');
+      limit.type = 'number';
+      limit.min = Math.max(1, row.cards.length);
+      limit.max = OFFICE_MAX_LIMIT;
+      limit.value = row.limit;
+      limit.setAttribute('aria-label', 'จำนวนคนสูงสุดในแถว ' + (i + 1));
+      limit.onchange = () => {
+        const count = Number(limit.value);
+        if (!Number.isInteger(count) || count < Number(limit.min) || count > OFFICE_MAX_LIMIT) {
+          limit.value = row.limit;
+          setError('กำหนดจำนวนได้ตั้งแต่ ' + limit.min + ' ถึง ' + OFFICE_MAX_LIMIT + ' คนในแถวนี้');
+          return;
+        }
+        row.limit = count;
+        setError('');
+        updateDestination(Number(destination.value));
+      };
+      label.append(limit);
+      const moveRow = (label, offset) => {
+        const action = button('secondary-action', label, () => {
+          const next = i + offset;
+          [rows[i], rows[next]] = [rows[next], rows[i]];
+          renderDraft(next);
+        });
+        action.disabled = !rows[i + offset];
+        action.setAttribute('aria-label', label + ' แถว ' + (i + 1));
+        return action;
+      };
+      head.append(element('strong', '', 'แถว ' + (i + 1)), label, moveRow('ขึ้น', -1), moveRow('ลง', 1));
+      if (!row.cards.length && rows.length > 1) head.append(button('secondary-action', 'ลบแถวว่าง', () => {
+        rows.splice(i, 1);
+        renderDraft(i);
+      }));
+      const items = row.cards.length ? element('ol') : element('p', 'caption', 'แถวว่าง');
+      row.cards.forEach(key => items.append(element('li', '', cardLabel(key))));
+      block.append(head, items);
+      return block;
+    }));
+  }
+
+  cardSelect.onchange = destination.onchange = updateOrder;
+  move.onclick = () => {
+    if (move.disabled) return;
+    const key = cardSelect.value;
+    const source = rows.find(row => row.cards.includes(key));
+    const index = Number(destination.value);
+    source.cards.splice(source.cards.indexOf(key), 1);
+    rows[index].cards.splice(Number(order.value), 0, key);
+    setError('');
+    renderDraft(index);
+  };
+  add.onclick = () => {
+    rows.push({ limit: OFFICE_DEFAULT_LIMIT, cards: [] });
+    renderDraft(rows.length - 1);
+  };
+  cancel.onclick = () => dialog.close();
+  form.onsubmit = async event => {
+    event.preventDefault();
+    if (isSaving) return;
+    if (!isPreview && !Object.hasOwn(data, 'officeLayout')) {
+      setError('กรุณาเผยแพร่ Code.gs เวอร์ชันใหม่ แล้วกดอัปเดตหน้าเว็บ');
+      return;
+    }
+    const controls = [...form.elements].filter(control => !control.disabled);
+    isSaving = true;
+    controls.forEach(control => { control.disabled = true; });
+    save.textContent = 'กำลังบันทึก…';
+    setError('');
+    try {
+      data.officeLayout = isPreview ? { revision: '', rows }
+        : await phoenixRequest('savePhoenixOfficeLayout', { rows, previousRevision });
+      dialog.close();
+      render();
+      notice('บันทึกผังข้อมูลสำนักแล้ว');
+      byId('notice').classList.add('success');
+    } catch (failure) {
+      setError(rpcErrorText(failure));
+    } finally {
+      isSaving = false;
+      controls.forEach(control => { control.disabled = false; });
+      save.textContent = 'บันทึกผัง';
+    }
+  };
+  setError('');
+  renderDraft();
+  dialog.showModal();
 }
 
 function appendLegacyOfficeInfo(body) {
@@ -2787,6 +2992,9 @@ byId('entryDialog').addEventListener('cancel', event => {
   if (isSaving) event.preventDefault();
 });
 byId('entryForm').addEventListener('submit', submitEntry);
+byId('officeLayoutDialog').addEventListener('cancel', event => {
+  if (isSaving) event.preventDefault();
+});
 byId('calendarDeleteDialog').addEventListener('cancel', event => {
   if (isSaving) event.preventDefault();
 });
