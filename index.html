@@ -472,7 +472,110 @@ const BANGKOK_TIME = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit',
 });
 const byId = id => document.getElementById(id);
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwUw5M1KloGCtU2sLwjWju7-XRAWnpmbVtjKyWMPg29z9vcBsugJTe8lWtmMuEIhyD5/exec';
+const GITHUB_PAGES_ORIGIN = 'https://phoexiix.github.io';
+const BRIDGE_PROTOCOL = 'phoenix-bridge-v1';
+const GAS_ORIGIN = /^https:\/\/(?:script\.google\.com|(?:[a-z0-9-]+[.-])?script\.googleusercontent\.com)$/i;
 const isAppsScript = Boolean(window.google?.script?.run);
+const isPreview = !isAppsScript && (location.protocol === 'file:' ||
+  location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+let phoenixBridge;
+
+function randomPhoenixId() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)),
+    byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function isBridgeFrame(source, frameWindow) {
+  try {
+    // HtmlService can run our page in a nested sandbox iframe.
+    for (let depth = 0; source && source !== window && depth < 6; depth += 1) {
+      if (source === frameWindow) return true;
+      if (source.parent === source) return false;
+      source = source.parent;
+    }
+  } catch (_) {
+    return false;
+  }
+  return false;
+}
+
+function connectPhoenixBridge() {
+  if (phoenixBridge) return phoenixBridge.ready;
+  if (location.origin !== GITHUB_PAGES_ORIGIN) {
+    return Promise.reject(new Error('กรุณาเปิดเว็บจาก GitHub Pages ที่ ' + GITHUB_PAGES_ORIGIN));
+  }
+
+  const channel = randomPhoenixId();
+  const pending = new Map();
+  const frame = document.createElement('iframe');
+  frame.hidden = true;
+  frame.title = 'ตัวเชื่อมต่อ Google Sheets';
+  const address = new URL(APPS_SCRIPT_URL);
+  address.searchParams.set('bridge', '1');
+  address.searchParams.set('channel', channel);
+
+  const ready = new Promise((resolve, reject) => {
+    let source;
+    let origin;
+    const timer = setTimeout(() => {
+      window.removeEventListener('message', receive);
+      frame.remove();
+      phoenixBridge = undefined;
+      reject(new Error('Apps Script ยังไม่ตอบกลับ กรุณาตรวจสอบเวอร์ชันที่เผยแพร่และสิทธิ์บัญชี Google แล้วกดอัปเดต'));
+    }, 25000);
+
+    function receive(event) {
+      const message = event.data;
+      if (!message || message.protocol !== BRIDGE_PROTOCOL || message.channel !== channel) return;
+      if (message.type === 'ready' && !source) {
+        if (!GAS_ORIGIN.test(event.origin) || !isBridgeFrame(event.source, frame.contentWindow)) return;
+        source = event.source;
+        origin = event.origin;
+        clearTimeout(timer);
+        resolve((method, payload) => new Promise((done, fail) => {
+          const id = randomPhoenixId();
+          const responseTimer = setTimeout(() => {
+            pending.delete(id);
+            fail(new Error('Apps Script ใช้เวลาตอบนาน กรุณากดอัปเดตเพื่อตรวจสอบข้อมูลก่อนลองอีกครั้ง'));
+          }, 45000);
+          pending.set(id, { done, fail, responseTimer });
+          try {
+            source.postMessage({ protocol: BRIDGE_PROTOCOL, channel, type: 'request', id, method, payload }, origin);
+          } catch (error) {
+            clearTimeout(responseTimer);
+            pending.delete(id);
+            fail(error);
+          }
+        }));
+        return;
+      }
+      if (event.source !== source || event.origin !== origin || message.type !== 'response') return;
+      const call = pending.get(message.id);
+      if (!call) return;
+      pending.delete(message.id);
+      clearTimeout(call.responseTimer);
+      if (message.ok === true) call.done(message.value);
+      else call.fail(new Error(message.message || 'Apps Script ตอบกลับไม่สำเร็จ'));
+    }
+
+    window.addEventListener('message', receive);
+    frame.src = address.href;
+    document.body.append(frame);
+  });
+  phoenixBridge = { ready };
+  return ready;
+}
+
+function phoenixRequest(method, payload) {
+  if (!isAppsScript) return connectPhoenixBridge().then(send => send(method, payload));
+  return new Promise((resolve, reject) => {
+    const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+    if (payload === undefined) runner[method]();
+    else runner[method](payload);
+  });
+}
+
 let data = null;
 let currentSection = 'home';
 let isLoading = false;
@@ -563,7 +666,7 @@ function connection(state, label) {
 
 function refresh() {
   if (isLoading || isSaving || byId('entryDialog').open || byId('reportDialog').open) return;
-  if (!isAppsScript) {
+  if (isPreview) {
     if (!data) {
       data = sampleData(new Date());
       for (const key of Object.keys(ENTRY_FIELDS)) {
@@ -582,7 +685,7 @@ function refresh() {
   byId('content').setAttribute('aria-busy', 'true');
   connection('loading', 'กำลังโหลดข้อมูล');
   notice('');
-  google.script.run.withSuccessHandler(result => {
+  phoenixRequest('getPhoenixDashboard').then(result => {
     if (!result?.areaReports || !Object.keys(ENTRY_FIELDS).every(key => Array.isArray(result[key]))) {
       finishRefresh('error', 'โค้ดเว็บและ Apps Script คนละเวอร์ชัน');
       notice('กรุณาใช้ Code.gs และ index.html จากชุดเดียวกัน แล้วเผยแพร่เวอร์ชันใหม่', true);
@@ -592,12 +695,12 @@ function refresh() {
     data = result;
     finishRefresh('ready', 'เชื่อมต่อ Google Sheets');
     render();
-  }).withFailureHandler(error => {
+  }).catch(error => {
     finishRefresh('error', 'โหลดข้อมูลไม่สำเร็จ');
     notice((data ? 'กำลังแสดงข้อมูลจากการโหลดครั้งล่าสุด · ' : '') +
       rpcErrorText(error), true);
     if (!data) render();
-  }).getPhoenixDashboard();
+  });
 }
 
 function finishRefresh(state, label) {
@@ -1076,16 +1179,16 @@ function openAreaReport() {
     }
     feedback.hidden = true;
     setReportSaving(true);
-    if (!isAppsScript) {
+    if (isPreview) {
       const report = data.areaReports[code] || { result: '', districts: null };
       saved(mode === 'province' ? { ...report, result: value } : { ...report, districts: value });
       return;
     }
-    google.script.run.withSuccessHandler(saved).withFailureHandler(error => {
+    phoenixRequest('savePhoenixAreaReport', { province: code, mode, value }).then(saved).catch(error => {
       setReportSaving(false);
       feedback.textContent = rpcErrorText(error);
       feedback.hidden = false;
-    }).savePhoenixAreaReport({ province: code, mode, value });
+    });
   };
   form.hidden = true;
   dialog.showModal();
@@ -1269,8 +1372,7 @@ function openEntryForm(key = currentSection, existing = null) {
   if (isLoading || !data || !ENTRY_FIELDS[key]) return;
   if (key === 'field77' && !existing && !areaView.province) return;
   entryRequest = existing ? { section: key, id: existing.id, row: existing.row, previous: { ...existing } }
-    : { section: key, id: Array.from(crypto.getRandomValues(new Uint8Array(16)),
-      byte => byte.toString(16).padStart(2, '0')).join('') };
+    : { section: key, id: randomPhoenixId() };
   byId('entryTitle').textContent = existing ? 'แก้ไขข้อมูล · ' + existing.title : 'เพิ่มข้อมูล · ' + SECTIONS[key].label;
   const fields = byId('entryFields');
   fields.replaceChildren();
@@ -1410,19 +1512,19 @@ function submitEntry(event) {
   }
   byId('entryError').hidden = true;
   setSaving(true);
-  if (!isAppsScript) {
+  if (isPreview) {
     if (previous) Object.assign(data[section].find(entry => entry.id === id), fields, { relatedId });
     else data[section].push({ ...fields, id, relatedId });
     data.updatedAt = BANGKOK_TIME.format(new Date());
     finishEntry(data);
     return;
   }
-  const rpc = google.script.run.withSuccessHandler(finishEntry).withFailureHandler(error => {
+  const method = previous ? 'updatePhoenixEntry' : 'addPhoenixEntry';
+  const payload = previous ? { section, id, row, fields, previous, relatedId } : { section, id, fields, relatedId };
+  phoenixRequest(method, payload).then(finishEntry).catch(error => {
     setSaving(false);
     entryError(rpcErrorText(error));
   });
-  if (previous) rpc.updatePhoenixEntry({ section, id, row, fields, previous, relatedId });
-  else rpc.addPhoenixEntry({ section, id, fields, relatedId });
 }
 
 function entryError(message) {
@@ -1448,7 +1550,7 @@ function finishEntry(result) {
     }
   }
   render();
-  notice(isAppsScript ? 'บันทึกข้อมูลลง Google Sheets แล้ว' : 'บันทึกข้อมูลตัวอย่างแล้ว ข้อมูลจะหายเมื่อปิดหรือโหลดหน้านี้ใหม่');
+  notice(isPreview ? 'บันทึกข้อมูลตัวอย่างแล้ว ข้อมูลจะหายเมื่อปิดหรือโหลดหน้านี้ใหม่' : 'บันทึกข้อมูลลง Google Sheets แล้ว');
   byId('notice').classList.add('success');
 }
 
@@ -1497,7 +1599,7 @@ byId('sidebar').addEventListener('keydown', event => {
 });
 byId('refresh').addEventListener('click', refresh);
 refresh();
-if (isAppsScript && !data) render();
+if (!data) render();
 </script>
 </body>
 </html>
