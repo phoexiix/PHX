@@ -533,7 +533,10 @@ const OFFICE_DEFAULT_ROWS = [['commander'], ['secretary-1', 'secretary-2'], ['de
 const OFFICE_DEFAULT_LIMIT = 5;
 const OFFICE_MAX_LIMIT = 12;
 const OFFICE_MAX_ROWS = 100;
-const OFFICE_FORM_FIELDS = [['officePosition', 'ตำแหน่ง'], ['title', 'ชื่อ–นามสกุล'], ['details', 'รายละเอียด (ไม่บังคับ)']];
+const OFFICE_FORM_FIELDS = [
+  ['officePosition', 'ตำแหน่งในผัง'], ['officePositionName', 'ชื่อตำแหน่งที่แสดง (ไม่บังคับ)'],
+  ['title', 'ชื่อ–นามสกุล'], ['details', 'รายละเอียด (ไม่บังคับ)'],
+];
 const CALENDAR_FORM_FIELDS = [
   ['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'],
   ['category', 'ประเภทตารางงาน'], ['details', 'รายละเอียด (ไม่บังคับ)'],
@@ -1979,6 +1982,10 @@ function moveCalendarMonth(offset) {
   byId(offset < 0 ? 'calendarPrevious' : 'calendarNext').focus();
 }
 
+function officePositionLabel(position, entry) {
+  return entry?.officePositionName?.trim() || OFFICE_POSITIONS[position] || position;
+}
+
 function officeCardEntries() {
   const cards = new Map(OFFICE_DEFAULT_ROWS.flat().map(position => [
     position, { position, entry: data.profile.find(entry => entry.officePosition === position) },
@@ -2023,7 +2030,7 @@ function renderOfficeGrid(grid, cards, rows, wireRow) {
         else if (commander && legacy.length) showOfficeCommander();
         else openEntryForm('profile', null, position);
       });
-      card.append(element('strong', '', OFFICE_POSITIONS[position]),
+      card.append(element('strong', '', officePositionLabel(position, entry)),
         element('span', 'caption', entry?.title || (commander && legacyName) || 'ยังไม่ได้เพิ่มข้อมูล'));
       if (entry?.details?.trim()) card.append(element('span', 'caption detail', entry.details));
       row.append(card);
@@ -2096,7 +2103,7 @@ function openOfficeLayout(panel, heading, frame, grid, cards) {
   function updateTargets() {
     const key = draggedKey || selectedKey;
     const card = key && cards.get(key);
-    help.textContent = card ? 'กำลังย้าย ' + (card.entry?.title || OFFICE_POSITIONS[card.position]) + ' · เลือกช่อง + เพื่อวาง'
+    help.textContent = card ? 'กำลังย้าย ' + (card.entry?.title || officePositionLabel(card.position, card.entry)) + ' · เลือกช่อง + เพื่อวาง'
       : 'ลากการ์ดบนผังได้เลย หรือแตะการ์ดแล้วแตะ + เพื่อวาง';
     cardButtons.forEach((control, cardKey) => control.setAttribute('aria-pressed', String(cardKey === key)));
     slots.forEach(({ control, row }) => {
@@ -2656,7 +2663,7 @@ function showDetail(key, entry) {
   const body = byId('detailBody');
   const list = element('dl');
   if (key === 'profile' && entry.officePosition) {
-    list.append(element('dt', '', 'ตำแหน่ง'), element('dd', '', OFFICE_POSITIONS[entry.officePosition] || entry.officePosition));
+    list.append(element('dt', '', 'ตำแหน่ง'), element('dd', '', officePositionLabel(entry.officePosition, entry)));
   }
   if (key === 'field77') {
     list.append(element('dt', '', 'พื้นที่'), element('dd', '',
@@ -2800,6 +2807,7 @@ function openEntryForm(key = currentSection, existing = null, officePosition = '
       control.maxLength = field === 'details' ? 8000 : 300;
     }
     control.value = value;
+    if (field === 'officePositionName') control.placeholder = 'เว้นว่างเพื่อใช้ชื่อตามตำแหน่งในผัง';
     control.required = field === 'title' || field === 'officePosition' ||
       (isCalendar && (field === 'date' || field === 'category'));
     label.append(control);
@@ -2912,10 +2920,11 @@ function submitEntry(event) {
     return;
   }
   if (Object.hasOwn(fields, 'officePosition')) {
-    if (!isPreview && !data.officeProfileEnabled) {
+    if (!isPreview && !data.officePositionNameEnabled) {
       entryError('กรุณาเผยแพร่ Code.gs เวอร์ชันใหม่ใน Apps Script แล้วอัปเดตหน้าเว็บ');
       return;
     }
+    fields.officePositionName = fields.officePositionName.trim();
     if (!Object.hasOwn(OFFICE_POSITIONS, fields.officePosition)) {
       entryError('กรุณาเลือกตำแหน่ง');
       return;
