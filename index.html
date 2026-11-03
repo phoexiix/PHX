@@ -387,7 +387,7 @@ const ENTRY_FIELDS = {
   calendar: [['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'], ['time', 'เวลา'], ['title', 'หัวข้อตารางงาน'], ['category', 'ประเภทตารางงาน'], ['location', 'สถานที่'], ['details', 'รายละเอียด']],
   field77: [['date', 'วันที่เดินทาง'], ['title', 'หัวข้อการเดินทาง'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
 };
-const CALENDAR_ADD_FIELDS = [
+const CALENDAR_FORM_FIELDS = [
   ['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'],
   ['category', 'ประเภทตารางงาน'], ['details', 'รายละเอียด (ไม่บังคับ)'],
 ];
@@ -408,7 +408,6 @@ const CALENDAR_TYPES = {
   'สภาสูงสุดฟินิกซ์': 'high-council',
   'งดปฏิบัติหน้าที่': 'off-duty',
 };
-const CALENDAR_DUTY_TYPES = ['ประจำการส่วนหน้า', 'ประจำการสั่งการ', 'ประจำการค่ายยุทธวิธี'];
 const MONTH_FORMAT = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const CLOSED = ['เสร็จสิ้น', 'ยกเลิก'];
 
@@ -1451,8 +1450,8 @@ function rpcErrorText(error) {
 function openEntryForm(key = currentSection, existing = null) {
   if (isLoading || !data || !ENTRY_FIELDS[key]) return;
   if (key === 'field77' && !existing) return;
-  const addingCalendar = key === 'calendar' && !existing;
-  const formFields = addingCalendar ? CALENDAR_ADD_FIELDS : ENTRY_FIELDS[key];
+  const isCalendar = key === 'calendar';
+  const formFields = isCalendar ? CALENDAR_FORM_FIELDS : ENTRY_FIELDS[key];
   entryRequest = existing ? { section: key, id: existing.id, row: existing.row, previous: { ...existing } }
     : { section: key, id: randomPhoenixId() };
   byId('entryTitle').textContent = existing ? 'แก้ไขข้อมูล · ' + entryDisplayTitle(key, existing) : 'เพิ่มข้อมูล · ' + SECTIONS[key].label;
@@ -1461,13 +1460,10 @@ function openEntryForm(key = currentSection, existing = null) {
   if (key === 'field77') appendAreaFields(fields, existing);
   for (const [field, title] of formFields) {
     const label = element('label', '', title);
-    const choices = field === 'category'
-      ? Object.keys(CALENDAR_TYPES).filter(type => addingCalendar || !CALENDAR_DUTY_TYPES.includes(type))
+    const choices = field === 'category' ? Object.keys(CALENDAR_TYPES)
       : field === 'status' ? STATUS_OPTIONS[key] : null;
     const control = element(choices ? 'select' : field === 'details' ? 'textarea' : 'input');
-    let value = existing?.[field] ?? (field === 'date' ? (key === 'calendar' ? selectedCalendarDate || data.today : data.today) : '');
-    if (field === 'title' && existing) value = entryDisplayTitle(key, existing);
-    if (field === 'category' && CALENDAR_DUTY_TYPES.includes(value)) value = CALENDAR_BASE_TYPE;
+    const value = existing?.[field] ?? (field === 'date' ? (isCalendar ? selectedCalendarDate || data.today : data.today) : '');
     control.name = field;
     if (choices) {
       control.append(new Option(field === 'category' ? 'เลือกประเภทตารางงาน' : 'ไม่ระบุ', ''));
@@ -1475,33 +1471,18 @@ function openEntryForm(key = currentSection, existing = null) {
         control.append(new Option(field === 'category' ? calendarTypeLabel(choice) : choice, choice));
       });
       if (value && !choices.includes(value)) control.append(new Option(value, value));
-    } else if (field === 'date' || field === 'endDate' || field === 'time') {
-      const type = field === 'time' ? 'time' : 'date';
-      const isNativeValue = type === 'date' ? isDate(value) : /^\d{2}:\d{2}$/.test(value);
-      control.type = !value || isNativeValue ? type : 'text';
+    } else if (field === 'date' || field === 'endDate') {
+      control.type = !value || isDate(value) ? 'date' : 'text';
     } else {
       control.maxLength = field === 'details' ? 8000 : 300;
     }
     control.value = value;
-    control.required = field === 'title' || (key === 'calendar' && (field === 'date' || field === 'category'));
+    control.required = field === 'title' || (isCalendar && (field === 'date' || field === 'category'));
     label.append(control);
     fields.append(label);
-    if (field === 'category' && !addingCalendar) {
-      const dutyLabel = element('label', '', 'จุดประจำการ');
-      const duty = element('select');
-      duty.name = 'duty';
-      duty.append(new Option('ประจำการ (ไม่ระบุ)', ''));
-      CALENDAR_DUTY_TYPES.forEach(type => duty.append(new Option(type, type)));
-      duty.value = CALENDAR_DUTY_TYPES.includes(existing?.category) ? existing.category : '';
-      dutyLabel.append(duty);
-      fields.append(dutyLabel);
-      const toggleDuty = () => { dutyLabel.hidden = control.value !== CALENDAR_BASE_TYPE; };
-      control.addEventListener('change', toggleDuty);
-      toggleDuty();
-    }
   }
 
-  if (key === 'calendar') {
+  if (isCalendar) {
     const start = fields.querySelector('[name="date"]');
     const end = fields.querySelector('[name="endDate"]');
     const syncMinimum = () => { end.min = start.value; };
@@ -1509,10 +1490,10 @@ function openEntryForm(key = currentSection, existing = null) {
     syncMinimum();
   }
 
-  byId('entryRelatedLabel').hidden = addingCalendar;
+  byId('entryRelatedLabel').hidden = isCalendar;
   const links = byId('entryRelated');
   links.replaceChildren(new Option('ไม่เชื่อมโยง', ''));
-  if (!addingCalendar) {
+  if (!isCalendar) {
     for (const otherKey of Object.keys(ENTRY_FIELDS)) {
       if (otherKey === key) continue;
       const group = element('optgroup');
@@ -1530,7 +1511,7 @@ function openEntryForm(key = currentSection, existing = null) {
   }
   byId('entryError').hidden = true;
   byId('entryDialog').showModal();
-  fields.querySelector(addingCalendar ? '[name="date"]' : '[name="title"]')?.focus();
+  fields.querySelector(isCalendar ? '[name="date"]' : '[name="title"]')?.focus();
 }
 
 function appendAreaFields(target, area) {
@@ -1577,24 +1558,20 @@ function submitEntry(event) {
   if (isLoading || isSaving || !entryRequest) return;
   const form = new FormData(event.currentTarget);
   const fields = Object.fromEntries(form);
-  const relatedId = fields.relatedId;
-  delete fields.relatedId;
   const { section, id, row, previous } = entryRequest;
-  if (section === 'calendar' && !previous) {
-    if (!Object.hasOwn(CALENDAR_TYPES, fields.category)) {
+  const relatedId = section === 'calendar' ? previous?.relatedId || '' : fields.relatedId;
+  delete fields.relatedId;
+  if (section === 'calendar') {
+    const sameCategory = fields.category === previous?.category;
+    if (!fields.category || (!sameCategory && !Object.hasOwn(CALENDAR_TYPES, fields.category))) {
       entryError('กรุณาเลือกประเภทตารางงาน');
       return;
     }
-    fields.title = calendarTypeLabel(fields.category);
-  }
-  if (!fields.title.trim()) {
-    entryError('กรุณากรอกหัวข้อ');
-    return;
-  }
-  if (section === 'calendar') {
-    if (previous && fields.title === entryDisplayTitle(section, previous)) fields.title = previous.title;
-    if (fields.category === CALENDAR_BASE_TYPE && fields.duty) fields.category = fields.duty;
-    delete fields.duty;
+    fields.title = (sameCategory && previous.title) || calendarTypeLabel(fields.category);
+    if (previous) {
+      fields.time = previous.time;
+      fields.location = previous.location;
+    }
     if (!isDate(fields.date) || (fields.endDate && !isDate(fields.endDate))) {
       entryError('กรุณาระบุวันที่ให้ถูกต้อง');
       return;
@@ -1606,6 +1583,9 @@ function submitEntry(event) {
     const endDate = fields.endDate || fields.date;
     entryRequest.calendarDate = selectedCalendarDate >= fields.date && selectedCalendarDate <= endDate
       ? selectedCalendarDate : fields.date;
+  } else if (!fields.title.trim()) {
+    entryError('กรุณากรอกหัวข้อ');
+    return;
   }
   byId('entryError').hidden = true;
   setSaving(true);
