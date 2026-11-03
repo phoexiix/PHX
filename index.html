@@ -376,7 +376,7 @@ function connection(state, label) {
 }
 
 function refresh() {
-  if (isLoading || isSaving) return;
+  if (isLoading || isSaving || byId('entryDialog').open) return;
   if (!isAppsScript) {
     if (!data) {
       data = sampleData(new Date());
@@ -391,6 +391,7 @@ function refresh() {
   }
   isLoading = true;
   byId('refresh').disabled = true;
+  byId('addEntry').disabled = true;
   byId('content').setAttribute('aria-busy', 'true');
   connection('loading', 'กำลังโหลดข้อมูล');
   notice('');
@@ -409,6 +410,7 @@ function refresh() {
 function finishRefresh(state, label) {
   isLoading = false;
   byId('refresh').disabled = false;
+  byId('addEntry').disabled = false;
   byId('content').setAttribute('aria-busy', 'false');
   connection(state, label);
 }
@@ -602,7 +604,7 @@ function rpcErrorText(error) {
 }
 
 function openEntryForm() {
-  if (!data || !ENTRY_FIELDS[currentSection]) return;
+  if (isLoading || !data || !ENTRY_FIELDS[currentSection]) return;
   const id = Array.from(crypto.getRandomValues(new Uint8Array(16)),
     byte => byte.toString(16).padStart(2, '0')).join('');
   entryRequest = { section: currentSection, id };
