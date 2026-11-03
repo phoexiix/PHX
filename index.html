@@ -329,7 +329,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 </dialog>
 <dialog id="reportDialog" aria-labelledby="reportTitle">
   <div class="dialog-head">
-    <div><div class="kicker">PROVINCIAL REPORT</div><h2 id="reportTitle">รายงานภารกิจวางกำลังฟินิกซ์</h2></div>
+    <div><div class="kicker">PROVINCIAL REPORT</div><h2 id="reportTitle">รายการรายงาน 77</h2></div>
     <button id="closeReport" class="close" type="button" aria-label="ปิดรายการรายงาน">×</button>
   </div>
   <div id="reportModes" class="filters" aria-label="ประเภทรายงาน"></div>
@@ -815,6 +815,31 @@ function calendarEndDate(entry) {
   return isDate(entry.endDate) && entry.endDate >= entry.date ? entry.endDate : entry.date;
 }
 
+function groupConsecutiveCalendarDays(entries) {
+  const daily = entries.filter(entry => calendarEndDate(entry) === entry.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const latestByItem = new Map();
+  const ranges = [];
+  for (const entry of daily) {
+    const key = JSON.stringify([entry.category, entryDisplayTitle('calendar', entry)]);
+    const run = latestByItem.get(key);
+    if (!run || Date.parse(entry.date) - Date.parse(run.endDate) > 86400000) {
+      latestByItem.set(key, { ...entry, endDate: entry.date, dailyEntries: [entry] });
+      continue;
+    }
+    if (run.endDate === run.date && entry.date > run.date) ranges.push(run);
+    run.endDate = entry.date;
+    run.dailyEntries.push(entry);
+  }
+  return ranges;
+}
+
+function selectCalendarDay(date) {
+  selectedCalendarDate = date;
+  render();
+  byId('calendarSelected').focus();
+}
+
 function renderCalendarRangeRows(body, dates, ranges) {
   const lanes = [];
   for (const entry of ranges) {
@@ -844,7 +869,14 @@ function renderCalendarRangeRows(body, dates, ranges) {
       if (endDate > dates[end]) classes.push('continues-right');
       const title = entryDisplayTitle('calendar', entry);
       const category = calendarTypeLabel(entry.category);
-      const bar = button(classes.join(' '), title, () => showDetail('calendar', entry));
+      const bar = button(classes.join(' '), title, () => {
+        if (!entry.dailyEntries) {
+          showDetail('calendar', entry);
+          return;
+        }
+        const selectedInSegment = selectedCalendarDate >= dates[start] && selectedCalendarDate <= dates[end];
+        selectCalendarDay(selectedInSegment ? selectedCalendarDate : dates[start]);
+      });
       bar.title = [category, title].filter(Boolean).join(' · ');
       bar.setAttribute('aria-label', [title, category, formatDate(entry.date), formatDate(endDate)]
         .filter(Boolean).join(' · '));
@@ -868,9 +900,13 @@ function renderCalendar(target) {
   const monthKey = selectedCalendarDate.slice(0, 7);
   const monthStart = monthKey + '-01';
   const monthEnd = monthKey + '-' + String(lastDay).padStart(2, '0');
-  const monthEntries = data.calendar.filter(entry => isDate(entry.date) &&
-    entry.date <= monthEnd && calendarEndDate(entry) >= monthStart);
+  const calendarEntries = data.calendar.filter(entry => isDate(entry.date));
+  const overlapsMonth = entry => entry.date <= monthEnd && calendarEndDate(entry) >= monthStart;
+  const monthEntries = calendarEntries.filter(overlapsMonth);
+  const groupedRanges = groupConsecutiveCalendarDays(calendarEntries).filter(overlapsMonth);
+  const groupedEntries = new Set(groupedRanges.flatMap(range => range.dailyEntries));
   const ranges = monthEntries.filter(entry => calendarEndDate(entry) > entry.date)
+    .concat(groupedRanges)
     .sort((a, b) => a.date.localeCompare(b.date) || calendarEndDate(b).localeCompare(calendarEndDate(a)));
   const entriesFor = date => monthEntries.filter(entry => entry.date <= date && calendarEndDate(entry) >= date)
     .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
@@ -917,12 +953,8 @@ function renderCalendar(target) {
       const date = monthKey + '-' + String(day).padStart(2, '0');
       dates[column] = date;
       const entries = entriesFor(date);
-      const singleDayEntries = entries.filter(entry => calendarEndDate(entry) === entry.date);
-      const control = button('calendar-day', undefined, () => {
-        selectedCalendarDate = date;
-        render();
-        byId('calendarSelected').focus();
-      });
+      const singleDayEntries = entries.filter(entry => calendarEndDate(entry) === entry.date && !groupedEntries.has(entry));
+      const control = button('calendar-day', undefined, () => selectCalendarDay(date));
       control.setAttribute('aria-pressed', String(date === selectedCalendarDate));
       control.setAttribute('aria-label', formatDate(date) + ' · ' + entries.length + ' รายการ');
       control.append(element('strong', 'calendar-number', String(day)));
