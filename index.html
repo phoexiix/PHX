@@ -44,8 +44,6 @@ button:disabled { cursor: wait; opacity: .65; }
 .hero .kicker::before { content: ""; width: 25px; height: 1px; background: currentColor; }
 h1 { font-size: clamp(28px, 4vw, 48px); margin: 11px 0 7px; line-height: 1.22; letter-spacing: -.025em; }
 .hero p { margin: 0 0 21px; color: #e0e8ed; font-size: 15px; }
-.today { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #ffffff30; background: #12232e; padding: 8px 11px; border-radius: 5px; font-size: 12px; color: #e9d4b0; }
-.today .icon { width: 15px; height: 15px; }
 .mast-actions { display: flex; align-items: center; gap: 16px; }
 .refresh { display: flex; align-items: center; gap: 7px; border: 1px solid #ffffff3b; border-radius: 6px; padding: 7px 10px; color: white; background: transparent; }
 .refresh:hover { background: #ffffff19; }
@@ -152,9 +150,6 @@ dialog::backdrop { background: #101c27ad; }
 }
 .secondary-action { border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--navy); padding: 7px 11px; }
 .secondary-action:hover { background: #fbf7ef; border-color: #c4a675; }
-.overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
-.overview-grid .panel-head h3 { margin: 0; }
-.overview-grid .panel-head button { flex: none; }
 .area-crumb { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .area-heading { margin: 14px 0 10px; }
 .area-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); gap: 8px; }
@@ -162,11 +157,6 @@ dialog::backdrop { background: #101c27ad; }
 .area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .area-records { margin-top: 14px; }
 .area-records h3 { margin: 0; }
-.names-group { border: 1px solid var(--line); border-radius: 6px; margin: 0; min-width: 0; padding: 8px; }
-.names-group legend { padding: 0 4px; font-weight: 700; }
-.name-rows { display: grid; gap: 5px; }
-.name-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; }
-.names-group > button { margin-top: 7px; }
 #summaryDialog { width: min(690px, calc(100% - 28px)); }
 .summary-content { padding: 14px 18px 18px; }
 .summary-content > .item, .district-result > .item { border-top: 1px solid var(--line); }
@@ -181,8 +171,34 @@ dialog::backdrop { background: #101c27ad; }
 .district-result { border: 1px solid var(--line); border-radius: 6px; }
 .district-result > summary { padding: 8px 10px; }
 .district-result > summary .caption { display: block; padding-left: 16px; }
+.calendar-head { text-align: center; }
+.calendar-head h3, .calendar-daily h3 { margin: 0; }
+.calendar-head button { min-width: 36px; font-size: 17px; }
+.calendar-legend { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+.calendar-grid { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.calendar-grid th { padding: 7px 2px; color: var(--muted); background: #faf9f6; border-block: 1px solid var(--line); }
+.calendar-grid td { padding: 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+.calendar-grid td + td { border-left: 1px solid var(--line); }
+.calendar-grid tr:last-child td { border-bottom: 0; }
+.calendar-outside { background: #faf9f6; }
+.calendar-day { display: flex; flex-direction: column; gap: 3px; align-items: stretch; width: 100%; min-height: 92px; padding: 5px; border: 0; background: white; color: var(--ink); text-align: left; }
+.calendar-day:hover { background: #faf6eb; }
+.calendar-day[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #b88b55; background: #fffaf0; }
+.calendar-day:focus-visible { outline-offset: -3px; }
+.calendar-number { padding: 0 2px; }
+.calendar-tag { display: inline-block; max-width: 100%; padding: 3px 5px; border-radius: 4px; background: #edf1f4; color: #304b5d; font-size: 11px; }
+.calendar-day .calendar-tag { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.calendar-tag.abroad { background: #efe6fa; color: #653a88; }
+.calendar-tag.base { background: #e3f0e8; color: #285e44; }
+.calendar-tag.domestic { background: #faedda; color: #764917; }
+.calendar-tag.international { background: #e2eefb; color: #23578d; }
+.calendar-tag.off-duty { background: #fbe7e8; color: #8e2634; }
+.calendar-more { padding-left: 2px; color: var(--muted); font-size: 10px; }
+.calendar-daily { margin-top: 14px; }
+.calendar-daily .panel-head button { flex: none; }
 @media (max-width: 690px) {
-  .overview-grid { grid-template-columns: minmax(0, 1fr); }
+  .calendar-day { padding: 4px 2px; min-height: 76px; }
+  .calendar-day .calendar-tag { font-size: 10px; padding: 2px 3px; }
 }
 </style>
 </head>
@@ -195,10 +211,8 @@ dialog::backdrop { background: #101c27ad; }
       <path fill="none" stroke="currentColor" stroke-width="2" d="M19 30 29 38 41 42m40-12-10 8-12 4"/>
     </symbol>
     <symbol id="i-profile" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 20v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2Z"/></symbol>
-    <symbol id="i-travel" viewBox="0 0 24 24"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
     <symbol id="i-home" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
-    <symbol id="i-meetings" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h2m4 0h2"/></symbol>
-    <symbol id="i-command" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h2m4 0h2"/></symbol>
     <symbol id="i-field77" viewBox="0 0 24 24"><path d="M5 3h12l3 3v15H5Zm4 6h7m-7 4h7m-7 4h5"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 1 0-2 8m2-14v6h-6"/></symbol>
   </defs>
@@ -234,7 +248,6 @@ dialog::backdrop { background: #101c27ad; }
     <div class="kicker">SUPREME COMMANDER / PRIVATE PORTAL</div>
     <h1 id="siteTitle">ผู้บัญชาการสูงสุด</h1>
     <p>พื้นที่ส่วนตัวสำหรับดูข้อมูลและติดตามงานของผู้บัญชาการสูงสุด</p>
-    <div class="today"><svg class="icon" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><use href="#i-meetings"/></svg><span id="today"></span></div>
   </div>
 </section>
 <div class="workspace shell">
@@ -293,28 +306,28 @@ dialog::backdrop { background: #101c27ad; }
 'use strict';
 
 const SECTIONS = {
-  profile: { label: 'ข้อมูลผู้บัญชาการสูงสุด', english: 'SUPREME COMMANDER PROFILE', description: 'ข้อมูลประจำตัว ตำแหน่ง และหน้าที่รับผิดชอบ' },
-  home: { label: 'ภาพรวมทั้งหมด', english: 'COMMAND OVERVIEW' },
-  meetings: { label: 'รายการประชุม', english: 'MEETINGS', description: 'วัน เวลา หัวข้อ สถานที่และรูปแบบการประชุม' },
-  command: { label: 'รายการภารกิจผู้บัญชาการ', english: 'COMMANDER MISSIONS', description: 'ติดตามภารกิจและรายชื่อผู้ร่วมปฏิบัติ' },
-  travel: { label: 'รายการเดินทาง', english: 'TRAVEL LOG', description: 'ดูจุดหมาย ตำแหน่งล่าสุดที่บันทึก และวิธีเดินทาง' },
-  field77: { label: 'รายการภารกิจ 77', english: 'PROVINCIAL MISSIONS', description: 'ติดตามภารกิจรายภาค จังหวัด อำเภอและเขต' },
+  home: { label: 'เมนูหลัก', english: 'COMMAND OVERVIEW' },
+  profile: { label: 'ข้อมูลผู้บัญชาการ', english: 'SUPREME COMMANDER PROFILE', description: 'ข้อมูลประจำตัว ตำแหน่ง และหน้าที่รับผิดชอบ' },
+  calendar: { label: 'ตารางปฏิทิน', english: 'COMMAND CALENDAR', description: 'ดูตารางงานรายวันและเพิ่มรายการตามวันที่' },
+  field77: { label: 'รายการเดินทาง 77', english: 'PROVINCIAL TRAVEL', description: 'ดูรายการเดินทางแยกตามภาค จังหวัด และอำเภอหรือเขต' },
 };
 const ENTRY_FIELDS = {
   profile: [['title', 'หัวข้อข้อมูล'], ['details', 'รายละเอียด']],
-  meetings: [['date', 'วันที่ประชุม'], ['time', 'เวลา'], ['title', 'หัวข้อประชุม'], ['location', 'สถานที่หรือลิงก์'], ['method', 'รูปแบบการประชุม'], ['status', 'สถานะ'], ['details', 'ระเบียบวาระและรายละเอียด']],
-  command: [['date', 'วันที่ปฏิบัติภารกิจ'], ['title', 'ชื่อภารกิจ'], ['location', 'สถานที่'], ['commanders', 'ผู้บัญชาการ'], ['participants', 'ผู้ร่วมภารกิจ'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
-  travel: [['date', 'วันที่เดินทาง'], ['time', 'เวลา'], ['title', 'หัวข้อการเดินทาง'], ['origin', 'ต้นทาง'], ['location', 'ปลายทาง'], ['currentLocation', 'จุดที่อยู่ล่าสุด'], ['method', 'วิธีเดินทาง'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
-  field77: [['date', 'วันที่บันทึก'], ['title', 'หัวข้อภารกิจ'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
+  calendar: [['date', 'วันที่'], ['time', 'เวลา'], ['title', 'หัวข้อตารางงาน'], ['category', 'ประเภทตารางงาน'], ['location', 'สถานที่'], ['details', 'รายละเอียด']],
+  field77: [['date', 'วันที่เดินทาง'], ['title', 'หัวข้อการเดินทาง'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
 };
 const STATUS_OPTIONS = {
-  meetings: ['นัดหมายแล้ว', 'กำลังประชุม', 'เสร็จสิ้น', 'เลื่อน', 'ยกเลิก'],
-  command: ['ยังไม่เริ่ม', 'กำลังดำเนินการ', 'เสร็จสิ้น', 'ยกเลิก'],
-  travel: ['วางแผน', 'กำลังเดินทาง', 'ถึงปลายทาง', 'เสร็จสิ้น', 'ยกเลิก'],
   field77: ['ยังไม่เริ่ม', 'กำลังดำเนินการ', 'เสร็จสิ้น', 'ยกเลิก'],
 };
+const CALENDAR_TYPES = {
+  'พำนักต่างประเทศ': 'abroad',
+  'ประจำการฟินิกซ์': 'base',
+  'เดินทางในประเทศ': 'domestic',
+  'เดินทางต่างประเทศ': 'international',
+  'งดปฏิบัติหน้าที่': 'off-duty',
+};
+const MONTH_FORMAT = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const CLOSED = ['เสร็จสิ้น', 'ยกเลิก'];
-const NAME_FIELDS = ['commanders', 'participants'];
 
 // จังหวัดและอำเภอ/เขต: Open Admin Data (CC BY 4.0), แยกเฉพาะชื่อและรหัส
 // https://github.com/open-admin-data/thailand-administrative-divisions
@@ -402,7 +415,7 @@ const AREAS = {
 };
 
 const DATE_FORMAT = new Intl.DateTimeFormat('th-TH', { dateStyle: 'full', timeZone: 'UTC' });
-const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const BANGKOK_DATE = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
 });
@@ -413,10 +426,10 @@ const byId = id => document.getElementById(id);
 const isAppsScript = Boolean(window.google?.script?.run);
 let data = null;
 let currentSection = 'home';
-let currentFilter = 'all';
 let isLoading = false;
 let isSaving = false;
 let entryRequest = null;
+let selectedCalendarDate = '';
 let areaView = { region: -1, province: '', district: '' };
 
 function dateKey(now) {
@@ -471,7 +484,6 @@ function setMobileMenu(open) {
 function navigate(section) {
   if (section === 'field77' && currentSection !== section) areaView = { region: -1, province: '', district: '' };
   currentSection = section;
-  currentFilter = 'all';
   setMobileMenu(false);
   render();
   byId('sectionTitle').focus({ preventScroll: true });
@@ -551,7 +563,6 @@ function render() {
   const target = byId('content');
   const isHome = currentSection === 'home';
   const isArea = currentSection === 'field77';
-  byId('today').textContent = formatDate(data?.today || dateKey(new Date()));
   document.body.dataset.page = currentSection;
   byId('sidebar').hidden = isHome;
   byId('menuToggle').hidden = isHome;
@@ -577,32 +588,24 @@ function render() {
     target.append(element('p', 'empty', isLoading ? 'กำลังอ่านข้อมูลจากชีต…' : 'ยังไม่มีข้อมูลให้แสดง'));
     return;
   }
-  renderSection(target, currentSection);
-}
-
-function chronological(a, b) {
-  return (a.date || '9999').localeCompare(b.date || '9999') ||
-    (a.time || '99:99').localeCompare(b.time || '99:99');
+  if (currentSection === 'calendar') renderCalendar(target);
+  else renderSection(target);
 }
 
 function latestFirst(a, b) {
-  return (b.date || '').localeCompare(a.date || '') || (b.time || '').localeCompare(a.time || '');
+  const dateA = isDate(a.date) ? a.date : '';
+  const dateB = isDate(b.date) ? b.date : '';
+  return dateB.localeCompare(dateA) || (b.time || '').localeCompare(a.time || '');
 }
 
 function isActive(entry) {
   return !CLOSED.includes(entry.status);
 }
 
-function todayEntries(key) {
-  return data[key].filter(entry => entry.date === data.today && entry.status !== 'ยกเลิก');
-}
-
 function renderOverview(target) {
   const counts = data ? {
     profile: SECTIONS.profile.description,
-    meetings: todayEntries('meetings').length + ' นัดวันนี้',
-    command: data.command.filter(isActive).length + ' ภารกิจที่ยังเปิด',
-    travel: todayEntries('travel').length + ' รายการวันนี้',
+    calendar: data.calendar.length + ' รายการในปฏิทิน',
     field77: 'มีบันทึก ' + new Set(data.field77.map(entry => entry.province).filter(code => AREAS[code])).size + ' จาก 77 จังหวัด',
   } : null;
   const grid = element('div', 'portal-grid');
@@ -617,63 +620,115 @@ function renderOverview(target) {
     grid.append(card);
   });
   target.append(grid);
-  if (!data) return;
-
-  const overview = element('div', 'overview-grid');
-  const meetings = todayEntries('meetings').sort(chronological);
-  const travel = todayEntries('travel').reverse().sort(latestFirst);
-  const command = data.command.filter(isActive).sort(chronological);
-  const areas = data.field77.slice().reverse().sort(latestFirst);
-  const groups = [
-    ['meetings', 'ประชุมวันนี้', meetings, 'วันนี้ไม่มีรายการประชุม'],
-    ['travel', 'เดินทางวันนี้', travel, 'วันนี้ไม่มีรายการเดินทาง'],
-    ['command', 'ภารกิจผู้บัญชาการที่ยังเปิด', command, 'ไม่มีภารกิจที่ยังเปิด'],
-    ['field77', 'บันทึกภารกิจ 77 ล่าสุด', areas, 'ยังไม่มีบันทึกภารกิจจังหวัดหรืออำเภอ'],
-  ];
-  groups.forEach(([key, label, entries, empty]) => {
-    const panel = element('section', 'panel');
-    const head = element('div', 'panel-head');
-    head.append(element('h3', '', label), button('secondary-action', 'ดูทั้งหมด', () => navigate(key)));
-    panel.append(head);
-    if (key === 'travel') {
-      const last = travel.find(entry => entry.currentLocation);
-      if (last) panel.append(element('div', 'list-head', 'จุดที่ระบุล่าสุดวันนี้ · ' + last.currentLocation));
-    }
-    appendEntries(panel, key, entries.slice(0, 3), empty);
-    overview.append(panel);
-  });
-  target.append(overview);
 }
 
-function renderSection(target, key) {
-  const panel = element('section', 'panel');
-  if (key === 'profile') {
-    panel.append(element('div', 'list-head', data.profile.length + ' หัวข้อข้อมูล'));
-    appendEntries(panel, key, data.profile, 'ยังไม่มีข้อมูลผู้บัญชาการสูงสุด');
-    target.append(panel);
-    return;
+function calendarCategory(category) {
+  return Object.hasOwn(CALENDAR_TYPES, category) ? CALENDAR_TYPES[category] : 'neutral';
+}
+
+function renderCalendar(target) {
+  selectedCalendarDate ||= data.today;
+  const month = new Date(selectedCalendarDate.slice(0, 7) + '-01T00:00:00Z');
+  const end = new Date(month);
+  end.setUTCMonth(end.getUTCMonth() + 1, 0);
+  const lastDay = end.getUTCDate();
+  const monthKey = selectedCalendarDate.slice(0, 7);
+  const byDate = new Map();
+  const monthEntries = data.calendar.filter(entry => entry.date.slice(0, 7) === monthKey)
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  for (const entry of monthEntries) {
+    if (!byDate.has(entry.date)) byDate.set(entry.date, []);
+    byDate.get(entry.date).push(entry);
   }
-  const filters = [
-    ['all', 'ทั้งหมด', () => true],
-    ...(key === 'command' ? [['active', 'ยังเปิดอยู่', isActive]] : [
-      ['today', 'วันนี้', entry => entry.date === data.today && entry.status !== 'ยกเลิก'],
-      ['upcoming', 'ตั้งแต่วันนี้', entry => isDate(entry.date) && entry.date >= data.today && entry.status !== 'ยกเลิก'],
-    ]),
-  ];
-  const bar = element('div', 'filters');
-  filters.forEach(([value, label]) => {
-    const control = button('', label, () => {
-      currentFilter = value;
-      render();
-      byId('content').querySelector('[aria-pressed="true"]')?.focus();
-    });
-    control.setAttribute('aria-pressed', String(value === currentFilter));
-    bar.append(control);
+
+  const panel = element('section', 'panel calendar-panel');
+  const heading = element('h3', '', MONTH_FORMAT.format(month));
+  heading.id = 'calendarMonth';
+  const head = element('div', 'panel-head calendar-head');
+  const previous = button('secondary-action', '‹', () => moveCalendarMonth(-1));
+  previous.id = 'calendarPrevious';
+  previous.setAttribute('aria-label', 'เดือนก่อน');
+  const next = button('secondary-action', '›', () => moveCalendarMonth(1));
+  next.id = 'calendarNext';
+  next.setAttribute('aria-label', 'เดือนถัดไป');
+  head.append(previous, heading, next);
+
+  const legend = element('div', 'calendar-legend');
+  Object.keys(CALENDAR_TYPES).forEach(category => {
+    legend.append(element('span', 'calendar-tag ' + calendarCategory(category), category));
   });
-  const match = filters.find(([value]) => value === currentFilter) || filters[0];
-  const entries = data[key].filter(match[2]).sort(currentFilter === 'upcoming' ? chronological : latestFirst);
-  panel.append(bar, element('div', 'list-head', entries.length + ' รายการ'));
-  appendEntries(panel, key, entries, 'ไม่มีรายการในมุมมองนี้');
+
+  const calendar = element('table', 'calendar-grid');
+  calendar.setAttribute('aria-labelledby', heading.id);
+  const weekdays = element('tr');
+  ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'].forEach(label => {
+    const day = element('th', '', label);
+    day.scope = 'col';
+    weekdays.append(day);
+  });
+  calendar.createTHead().append(weekdays);
+  const body = calendar.createTBody();
+  const firstColumn = month.getUTCDay();
+  const rows = Math.ceil((firstColumn + lastDay) / 7);
+  for (let week = 0; week < rows; week += 1) {
+    const row = body.insertRow();
+    for (let column = 0; column < 7; column += 1) {
+      const cell = row.insertCell();
+      const day = week * 7 + column - firstColumn + 1;
+      if (day < 1 || day > lastDay) {
+        cell.className = 'calendar-outside';
+        continue;
+      }
+      const date = monthKey + '-' + String(day).padStart(2, '0');
+      const entries = byDate.get(date) || [];
+      const control = button('calendar-day', undefined, () => {
+        selectedCalendarDate = date;
+        render();
+        byId('calendarSelected').focus();
+      });
+      control.setAttribute('aria-pressed', String(date === selectedCalendarDate));
+      control.setAttribute('aria-label', formatDate(date) + ' · ' + entries.length + ' รายการ');
+      control.append(element('strong', 'calendar-number', String(day)));
+      entries.slice(0, 2).forEach(entry => {
+        const tag = element('span', 'calendar-tag ' + calendarCategory(entry.category),
+          [entry.time, entry.title].filter(Boolean).join(' '));
+        tag.title = [entry.category, entry.title].filter(Boolean).join(' · ');
+        control.append(tag);
+      });
+      if (entries.length > 2) control.append(element('span', 'calendar-more', '+' + (entries.length - 2)));
+      cell.append(control);
+    }
+  }
+  panel.append(head, legend, calendar);
+  target.append(panel);
+
+  const daily = element('section', 'panel calendar-daily');
+  const dailyHead = element('div', 'panel-head');
+  const dailyTitle = element('h3', '', formatDate(selectedCalendarDate));
+  dailyTitle.id = 'calendarSelected';
+  dailyTitle.tabIndex = -1;
+  const add = button('secondary-action', '+ เพิ่มข้อมูล', () => openEntryForm('calendar'));
+  add.disabled = isLoading;
+  dailyHead.append(dailyTitle, add);
+  daily.append(dailyHead);
+  appendEntries(daily, 'calendar', byDate.get(selectedCalendarDate) || [], 'ยังไม่มีรายการในวันที่เลือก');
+  target.append(daily);
+}
+
+function moveCalendarMonth(offset) {
+  const month = new Date(selectedCalendarDate.slice(0, 7) + '-01T00:00:00Z');
+  month.setUTCMonth(month.getUTCMonth() + offset);
+  const key = month.toISOString().slice(0, 10);
+  if (!isDate(key)) return;
+  selectedCalendarDate = key;
+  render();
+  byId(offset < 0 ? 'calendarPrevious' : 'calendarNext').focus();
+}
+
+function renderSection(target) {
+  const panel = element('section', 'panel');
+  panel.append(element('div', 'list-head', data.profile.length + ' หัวข้อข้อมูล'));
+  appendEntries(panel, 'profile', data.profile, 'ยังไม่มีข้อมูลผู้บัญชาการสูงสุด');
   target.append(panel);
 }
 
@@ -693,16 +748,15 @@ function appendEntries(panel, key, entries, emptyText) {
     if (entry.time) when.append(element('span', 'item-time', entry.time));
     when.append(element('span', entry.time ? 'item-date' : 'item-time', formatDate(entry.date, true)));
     const summary = element('span');
-    const subtitles = {
-      meetings: [entry.location, entry.method],
-      command: [namesFrom(entry.commanders).join(', '), entry.location],
-      travel: [entry.location, entry.method, entry.currentLocation && 'จุดล่าสุด ' + entry.currentLocation],
-      field77: [AREAS[entry.province]?.name, entry.district ? districtLabel(entry.province, entry.district) : 'ระดับจังหวัด'],
-    };
-    const subtitle = subtitles[key].filter(Boolean).join(' · ');
+    const subtitle = key === 'calendar' ? entry.location :
+      [AREAS[entry.province]?.name, entry.district ? districtLabel(entry.province, entry.district) : 'ระดับจังหวัด']
+        .filter(Boolean).join(' · ');
     summary.append(element('strong', '', entry.title));
     if (subtitle) summary.append(element('span', 'caption', subtitle));
-    row.append(when, summary, entry.status ? chip(entry.status) : element('span'));
+    const badge = key === 'calendar' && entry.category
+      ? element('span', 'calendar-tag ' + calendarCategory(entry.category), entry.category)
+      : entry.status ? chip(entry.status) : element('span');
+    row.append(when, summary, badge);
     panel.append(row);
   });
 }
@@ -786,7 +840,7 @@ function renderAreas(target) {
   if (province) {
     const panel = element('section', 'panel area-records');
     const scoped = (byDistrict.get(district) || []).slice().reverse().sort(latestFirst);
-    panel.append(element('h3', 'panel-head', district ? 'บันทึกประจำ' + word : 'บันทึกระดับจังหวัด'));
+    panel.append(element('h3', 'panel-head', district ? 'รายการเดินทางประจำ' + word : 'รายการเดินทางระดับจังหวัด'));
     if (data) {
       panel.append(element('div', 'list-head', scoped.length + ' รายการ'));
       appendEntries(panel, 'field77', scoped, 'ยังไม่มีบันทึกในพื้นที่นี้');
@@ -795,6 +849,16 @@ function renderAreas(target) {
     }
     target.append(panel);
   }
+}
+
+function areaSummaryBlock(label, entries, expanded = false) {
+  const block = element('details', 'district-result');
+  const summary = element('summary');
+  summary.append(element('strong', '', label), element('span', 'caption', areaCounts(entries)));
+  block.open = expanded;
+  block.append(summary);
+  appendEntries(block, 'field77', entries, 'ยังไม่มีบันทึก');
+  return block;
 }
 
 function openAreaSummary() {
@@ -822,13 +886,11 @@ function openAreaSummary() {
     controls.append(tab);
     tabs.push(tab);
   });
+  const recordedDistricts = new Set(entries.map(entry => entry.district).filter(code => Object.hasOwn(area.districts, code)));
   provincePanel.append(element('h3', '', 'ภาพรวม ' + area.name),
-    element('p', '', areaCounts(entries)),
     element('p', 'caption', 'มีบันทึกระดับจังหวัด ' + entries.filter(entry => !entry.district).length +
-      ' รายการ · มีบันทึกใน ' + new Set(entries.map(entry => entry.district).filter(Boolean)).size +
-      ' จาก ' + districts.length + ' ' + word),
-    element('h3', '', 'บันทึกล่าสุด'));
-  appendEntries(provincePanel, 'field77', entries.slice(0, 3), 'ยังไม่มีบันทึก');
+      ' รายการ · มีบันทึกใน ' + recordedDistricts.size + ' จาก ' + districts.length + ' ' + word),
+    areaSummaryBlock('รายการทั้งหมดในจังหวัด', entries, true));
 
   const picker = element('details', 'district-picker');
   const toggle = element('summary');
@@ -867,13 +929,7 @@ function openAreaSummary() {
     result.replaceChildren(element('h3', '', 'รวม ' + codes.length + ' ' + word), element('p', '', areaCounts(scoped)));
     const list = element('div', 'district-results');
     codes.forEach(code => {
-      const items = byDistrict.get(code) || [];
-      const block = element('details', 'district-result');
-      const summary = element('summary');
-      summary.append(element('strong', '', districtLabel(province, code)), element('span', 'caption', areaCounts(items)));
-      block.append(summary);
-      appendEntries(block, 'field77', items, 'ยังไม่มีบันทึก');
-      list.append(block);
+      list.append(areaSummaryBlock(districtLabel(province, code), byDistrict.get(code) || []));
     });
     result.append(list);
   }
@@ -897,7 +953,7 @@ function openAreaSummary() {
   districtPanel.append(picker, result);
   updateResults();
   body.replaceChildren(controls, provincePanel, districtPanel);
-  byId('summaryTitle').textContent = 'สรุปภารกิจ · ' + area.name;
+  byId('summaryTitle').textContent = 'สรุปการเดินทาง · ' + area.name;
   showTab(district ? 1 : 0);
   byId('summaryDialog').showModal();
 }
@@ -910,10 +966,6 @@ function chip(label) {
   };
   const tone = Object.hasOwn(tones, label) ? tones[label] : '';
   return element('span', 'chip ' + tone, label);
-}
-
-function namesFrom(value) {
-  return (value || '').split(/\r?\n/).map(name => name.trim()).filter(Boolean);
 }
 
 function showDetail(key, entry) {
@@ -929,7 +981,7 @@ function showDetail(key, entry) {
   for (const [field, label] of ENTRY_FIELDS[key]) {
     if (field === 'title' || field === 'details' || !entry[field]) continue;
     const value = field === 'date' ? formatDate(entry.date) : entry[field];
-    const content = element('dd', NAME_FIELDS.includes(field) ? 'detail' : '', value);
+    const content = element('dd', '', value);
     list.append(element('dt', '', label), content);
   }
   body.replaceChildren(list);
@@ -976,39 +1028,6 @@ function rpcErrorText(error) {
     : message;
 }
 
-function addNameControl(field, value = '') {
-  const row = element('div', 'name-row');
-  const input = element('input');
-  input.name = field;
-  input.type = 'text';
-  input.value = value;
-  input.maxLength = 150;
-  input.placeholder = 'ชื่อ–นามสกุล';
-  input.setAttribute('aria-label', field === 'commanders' ? 'ชื่อผู้บัญชาการ' : 'ชื่อผู้ร่วมภารกิจ');
-  const remove = button('secondary-action', 'ลบ', () => {
-    const siblings = row.parentElement;
-    row.remove();
-    (siblings.querySelector('input') || siblings.nextElementSibling).focus();
-  });
-  remove.setAttribute('aria-label', 'ลบรายชื่อแถวนี้');
-  row.append(input, remove);
-  return row;
-}
-
-function namesControl(field, label, value) {
-  const group = element('fieldset', 'names-group');
-  const rows = element('div', 'name-rows');
-  const names = namesFrom(value);
-  (names.length ? names : ['']).forEach(name => rows.append(addNameControl(field, name)));
-  const add = button('secondary-action', '+ เพิ่มรายชื่อ', () => {
-    const row = addNameControl(field);
-    rows.append(row);
-    row.querySelector('input').focus();
-  });
-  group.append(element('legend', '', label + (field === 'commanders' ? ' *' : '')), rows, add);
-  return group;
-}
-
 function openEntryForm(key = currentSection, existing = null) {
   if (isLoading || !data || !ENTRY_FIELDS[key]) return;
   if (key === 'field77' && !existing && !areaView.province) return;
@@ -1020,17 +1039,13 @@ function openEntryForm(key = currentSection, existing = null) {
   fields.replaceChildren();
   if (key === 'field77') appendAreaFields(fields, existing || areaView);
   for (const [field, title] of ENTRY_FIELDS[key]) {
-    if (NAME_FIELDS.includes(field)) {
-      fields.append(namesControl(field, title, existing?.[field]));
-      continue;
-    }
     const label = element('label', '', title);
-    const choices = field === 'status' ? STATUS_OPTIONS[key] : null;
+    const choices = field === 'category' ? Object.keys(CALENDAR_TYPES) : field === 'status' ? STATUS_OPTIONS[key] : null;
     const control = element(choices ? 'select' : field === 'details' ? 'textarea' : 'input');
-    const value = existing?.[field] ?? (field === 'date' ? data.today : '');
+    const value = existing?.[field] ?? (field === 'date' ? (key === 'calendar' ? selectedCalendarDate || data.today : data.today) : '');
     control.name = field;
     if (choices) {
-      control.append(new Option('ไม่ระบุ', ''));
+      control.append(new Option(field === 'category' ? 'เลือกประเภทตารางงาน' : 'ไม่ระบุ', ''));
       choices.forEach(choice => control.append(new Option(choice, choice)));
       if (value && !choices.includes(value)) control.append(new Option(value, value));
     } else if (field === 'date' || field === 'time') {
@@ -1040,8 +1055,7 @@ function openEntryForm(key = currentSection, existing = null) {
       control.maxLength = field === 'details' ? 8000 : 300;
     }
     control.value = value;
-    control.required = field === 'title' || ((!existing || value) &&
-      ((field === 'date' && key !== 'field77') || (key === 'travel' && (field === 'location' || field === 'method'))));
+    control.required = field === 'title' || (key === 'calendar' && (field === 'date' || field === 'category'));
     label.append(control);
     fields.append(label);
   }
@@ -1064,7 +1078,7 @@ function openEntryForm(key = currentSection, existing = null) {
   links.value = existing?.relatedId || '';
   byId('entryError').hidden = true;
   byId('entryDialog').showModal();
-  fields.querySelector('[name="title"], [name="commanders"]')?.focus();
+  fields.querySelector('[name="title"]')?.focus();
 }
 
 function appendAreaFields(target, area) {
@@ -1118,18 +1132,8 @@ function submitEntry(event) {
     entryError('กรุณากรอกหัวข้อ');
     return;
   }
-  if (section === 'command') {
-    for (const field of NAME_FIELDS) {
-      fields[field] = form.getAll(field).map(name => name.trim()).filter(Boolean).join('\n');
-      if (fields[field].length > 4000) {
-        entryError('รายชื่อยาวเกินกำหนด');
-        return;
-      }
-    }
-    if (!fields.commanders && (!previous || previous.commanders)) {
-      entryError('กรุณาระบุชื่อผู้บัญชาการอย่างน้อยหนึ่งคน');
-      return;
-    }
+  if (section === 'calendar') {
+    entryRequest.calendarDate = fields.date;
   }
   byId('entryError').hidden = true;
   setSaving(true);
@@ -1158,8 +1162,10 @@ function finishEntry(result) {
   data = result;
   setSaving(false);
   byId('entryDialog').close();
-  if (!entryRequest?.previous && currentSection === entryRequest?.section) currentFilter = 'all';
   const previous = entryRequest?.previous;
+  if (currentSection === 'calendar' && isDate(entryRequest?.calendarDate)) {
+    selectedCalendarDate = entryRequest.calendarDate;
+  }
   if (currentSection === 'field77' && entryRequest?.section === 'field77' && previous?.id &&
       previous.province === areaView.province && previous.district === areaView.district) {
     const saved = data.field77.find(entry => entry.id === previous.id);
@@ -1182,18 +1188,13 @@ function sampleData(now) {
       { title: 'ตำแหน่ง', details: 'ผู้บัญชาการสูงสุด' },
       { title: 'สังกัด', details: 'สถาบันฟินิกซ์' },
     ],
-    meetings: [
-      { date: today, time: '09:00', title: 'ประชุมติดตามภารกิจประจำวัน', location: 'ห้องประชุม PHX-02', method: 'ประชุมในห้อง', status: 'นัดหมายแล้ว', details: 'ทบทวนกำหนดการและเรื่องที่ต้องประสานในวันนี้' },
-    ],
-    command: [
-      { date: today, title: 'ตรวจความพร้อมห้องปฏิบัติการ', location: 'สถาบันฟินิกซ์', commanders: 'ผู้บัญชาการเวร', participants: 'เจ้าหน้าที่ประสานงาน\nเจ้าหน้าที่ฝ่ายปฏิบัติการ', status: 'กำลังดำเนินการ' },
-    ],
-    travel: [
-      { date: today, time: '13:30', title: 'เดินทางไปจุดประสานงาน', origin: 'สถาบันฟินิกซ์', location: 'อำเภอแม่จัน', currentLocation: 'อำเภอเมืองเชียงราย', method: 'รถยนต์', status: 'กำลังเดินทาง' },
+    calendar: [
+      { date: today, time: '09:00', title: 'ประจำการสำนักงานใหญ่', category: 'ประจำการฟินิกซ์', location: 'สถาบันฟินิกซ์' },
+      { date: today, time: '13:30', title: 'เดินทางไปจุดประสานงาน', category: 'เดินทางในประเทศ', location: 'เชียงราย' },
     ],
     field77: [
-      { date: today, title: 'สรุปการประสานงานระดับจังหวัด', province: '57', district: '', status: 'กำลังดำเนินการ' },
-      { date: today, title: 'ติดตามการประสานงานในพื้นที่', province: '57', district: '5701', status: 'เสร็จสิ้น' },
+      { date: today, title: 'บันทึกการเดินทางระดับจังหวัด', province: '57', district: '', status: 'กำลังดำเนินการ' },
+      { date: today, title: 'เดินทางไปประสานงานในพื้นที่', province: '57', district: '5701', status: 'เสร็จสิ้น' },
     ],
   };
 }
