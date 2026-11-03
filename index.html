@@ -57,6 +57,15 @@ h1 { font-size: clamp(28px, 4vw, 48px); margin: 11px 0 7px; line-height: 1.22; l
 .workspace { display: grid; grid-template-columns: 233px minmax(0, 1fr); gap: 28px; align-items: start; padding-top: 34px; padding-bottom: 48px; min-height: calc(100vh - 126px); }
 body[data-page="home"] .workspace { display: block; min-height: auto; }
 body:not([data-page="home"]) .hero { display: none; }
+@media (min-width: 691px) {
+  body:not([data-page="home"]) .workspace {
+    width: 100%; margin-inline: 0; padding-inline: 0 clamp(18px, 2vw, 32px);
+  }
+  body:not([data-page="home"]) :is(.mast, footer) .shell {
+    width: 100%; padding-inline: clamp(18px, 2vw, 32px);
+  }
+  body:not([data-page="home"]) .workspace .sidebar { border-radius: 0 12px 12px 0; }
+}
 .sidebar { color: #e0e9ee; background: #152632; border-radius: 12px; overflow: hidden; position: sticky; top: 18px; }
 .sidebar-head { padding: 19px 18px 15px; border-bottom: 1px solid #ffffff20; }
 .sidebar-head .kicker { display: block; color: var(--gold); }
@@ -123,7 +132,10 @@ h3 { font-size: 17px; margin: 4px 0 0; }
 @media (pointer: coarse) {
   .office-layout-slot:not(.empty) { width: 34px; }
 }
-.office-card { display: grid; align-content: start; gap: 6px; min-height: 88px; overflow-wrap: anywhere; }
+.office-card-row .office-card {
+  display: grid; align-content: start; gap: 6px; min-height: 94px;
+  padding: 14px 16px; line-height: 1.45; overflow-wrap: anywhere;
+}
 .office-card.commander { border-color: #b88b55; }
 .item + .item { border-top: 1px solid #eeece6; }
 .item:focus-visible { outline-offset: -3px; }
@@ -175,7 +187,7 @@ dialog::backdrop { background: #101c27ad; }
   .hero .shell { min-height: 215px; padding-top: 34px; padding-bottom: 28px; }
   .hero-art { opacity: .33; }
   .workspace { display: block; padding-top: 19px; }
-  .sidebar { display: none; position: static; width: min(100%, 320px); margin-bottom: 13px; }
+  .sidebar { display: none; position: static; width: min(calc(100% + 15px), 320px); margin: 0 0 13px -15px; border-radius: 0 12px 12px 0; }
   .sidebar.menu-open { display: block; }
   .menu-toggle { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 15px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 6px; color: var(--navy); background: white; }
   .portal-grid { gap: 9px; }
@@ -2013,6 +2025,10 @@ function officeLayoutRows(cards) {
   return rows;
 }
 
+function officeRowColumns(row) {
+  return Math.max(4, row.cards.length, row.limit > OFFICE_DEFAULT_LIMIT ? row.limit : 0);
+}
+
 function renderOfficeGrid(grid, cards, rows, wireRow) {
   const legacy = data.profile.filter(entry => !entry.officePosition);
   const legacyName = legacy.find(entry => /^ชื่อ[–— -]+นามสกุล$/.test(entry.title))?.details;
@@ -2020,7 +2036,7 @@ function renderOfficeGrid(grid, cards, rows, wireRow) {
   grid.style.setProperty('--office-max-columns', Math.max(OFFICE_DEFAULT_LIMIT, ...visibleRows.map(row => row.limit)));
   grid.replaceChildren(...visibleRows.map((config, index) => {
     const row = element('div', 'office-card-row');
-    row.style.setProperty('--office-columns', Math.max(OFFICE_DEFAULT_LIMIT, config.limit));
+    row.style.setProperty('--office-columns', officeRowColumns(config));
     for (const key of config.cards) {
       const { position, entry } = cards.get(key);
       const commander = position === 'commander';
@@ -2203,7 +2219,7 @@ function openOfficeLayout(panel, heading, frame, grid, cards) {
         }
         row.limit = count;
         title.textContent = 'แถว ' + (i + 1) + ' · ' + row.cards.length + '/' + row.limit + ' คน';
-        grid.children[i].style.setProperty('--office-columns', Math.max(OFFICE_DEFAULT_LIMIT, count));
+        grid.children[i].style.setProperty('--office-columns', officeRowColumns(row));
         grid.style.setProperty('--office-max-columns', Math.max(OFFICE_DEFAULT_LIMIT, ...rows.map(row => row.limit)));
         setError('');
         updateTargets();
