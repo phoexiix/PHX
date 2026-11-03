@@ -157,7 +157,7 @@ dialog::backdrop { background: #101c27ad; }
 .area-heading { margin: 14px 0 10px; }
 .area-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); gap: 8px; }
 .area-card { display: grid; gap: 4px; text-align: left; padding: 12px 14px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 7px; }
-.area-card:hover { border-color: #b88b55; background: #fffdf8; }
+button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .area-card.report-complete { border: 2px solid #348259; }
 .area-card.report-partial { border: 2px solid #bd414c; }
 .area-result-pass { color: #256442; }
@@ -463,7 +463,7 @@ let isLoading = false;
 let isSaving = false;
 let entryRequest = null;
 let selectedCalendarDate = '';
-let areaView = { region: -1, province: '', district: '' };
+let areaView = { region: -1, province: '' };
 
 function dateKey(now) {
   const parts = Object.fromEntries(BANGKOK_DATE.formatToParts(now).map(part => [part.type, part.value]));
@@ -515,7 +515,7 @@ function setMobileMenu(open) {
 }
 
 function navigate(section) {
-  if (section === 'field77' && currentSection !== section) areaView = { region: -1, province: '', district: '' };
+  if (section === 'field77' && currentSection !== section) areaView = { region: -1, province: '' };
   currentSection = section;
   setMobileMenu(false);
   render();
@@ -864,38 +864,35 @@ function areaCounts(entries) {
     ' · ยกเลิก ' + entries.filter(entry => entry.status === 'ยกเลิก').length;
 }
 
-function changeArea(region, province = '', district = '') {
+function changeArea(region, province = '') {
   if (province) {
     region = REGIONS.findIndex(([, codes]) => codes.includes(province));
-    if (region < 0 || (district && !Object.hasOwn(AREAS[province].districts, district))) return;
+    if (region < 0) return;
   }
-  areaView = { region, province, district };
+  areaView = { region, province };
   render();
   byId('areaHeading')?.focus();
 }
 
 function renderAreas(target) {
-  const { region, province, district } = areaView;
+  const { region, province } = areaView;
   const area = AREAS[province];
-  const word = districtWord(province);
   const entries = data?.field77 || [];
   const crumb = element('nav', 'area-crumb');
   crumb.setAttribute('aria-label', 'ตำแหน่งในภารกิจ 77');
   crumb.append(button('secondary-action', 'ทุกภาค', () => changeArea(-1)));
   if (region >= 0) crumb.append(button('secondary-action', REGIONS[region][0], () => changeArea(region)));
   if (area) crumb.append(button('secondary-action', area.name, () => changeArea(region, province)));
-  if (district) crumb.append(element('span', 'caption', districtLabel(province, district)));
   target.append(crumb);
 
-  const heading = element('h3', 'area-heading', district ? districtLabel(province, district)
-    : area ? area.name : region >= 0 ? REGIONS[region][0] : 'เลือกภาค');
+  const heading = element('h3', 'area-heading', area ? area.name : region >= 0 ? REGIONS[region][0] : 'เลือกภาค');
   heading.id = 'areaHeading';
   heading.tabIndex = -1;
   target.append(heading);
 
   const grid = element('div', 'area-grid');
   function appendChoice(label, action, detail = '', provinceCode = '') {
-    const control = button('area-card', undefined, action);
+    const control = action ? button('area-card', undefined, action) : element('div', 'area-card');
     control.append(element('strong', '', label));
     if (provinceCode) {
       const status = areaReportStatus(provinceCode);
@@ -913,20 +910,20 @@ function renderAreas(target) {
     REGIONS[region][1].forEach(code => {
       appendChoice(AREAS[code].name, () => changeArea(region, code), areaResult(code), code);
     });
-  } else if (!district) {
+  } else {
     Object.keys(area.districts).forEach(code => {
-      appendChoice(districtLabel(province, code), () => changeArea(region, province, code), areaResult(province, code));
+      appendChoice(districtLabel(province, code), null, areaResult(province, code));
     });
   }
   if (grid.childElementCount) target.append(grid);
 
   if (province) {
     const panel = element('section', 'panel area-records');
-    const scoped = entries.filter(entry => entry.province === province && entry.district === district)
+    const scoped = entries.filter(entry => entry.province === province && !entry.district)
       .reverse().sort(latestFirst);
-    panel.append(element('h3', 'panel-head', district ? 'รายการเดินทางประจำ' + word : 'รายการเดินทางระดับจังหวัด'));
+    panel.append(element('h3', 'panel-head', 'รายการเดินทางระดับจังหวัด'));
     if (data) {
-      const result = areaResult(province, district);
+      const result = areaResult(province);
       if (result) panel.append(element('div', 'list-head ' + areaResultClass(result), result));
       appendEntries(panel, 'field77', scoped, 'ยังไม่มีบันทึกในพื้นที่นี้');
     } else {
@@ -938,8 +935,8 @@ function renderAreas(target) {
 
 function areaResult(province, district = '') {
   const report = data?.areaReports?.[province];
-  if (!district) return report?.result || '';
-  if (!Array.isArray(report?.districts)) return '';
+  if (!district) return report?.result || 'รอดำเนินการ';
+  if (!Array.isArray(report?.districts)) return 'รอดำเนินการ';
   return report.districts.includes(district) ? 'ผ่าน' : 'ไม่ผ่าน';
 }
 
@@ -1076,13 +1073,13 @@ function areaSummaryBlock(label, entries, expanded = false) {
 }
 
 function openAreaSummary() {
-  const { province, district } = areaView;
+  const { province } = areaView;
   if (!data || !province) return;
   const area = AREAS[province];
   const word = districtWord(province);
   const entries = data.field77.filter(entry => entry.province === province).reverse().sort(latestFirst);
   const districts = Object.keys(area.districts);
-  const selected = new Set(district ? [district] : []);
+  const selected = new Set();
   const body = byId('summaryBody');
   const provincePanel = element('section', 'summary-content');
   const districtPanel = element('section', 'summary-content');
@@ -1133,19 +1130,16 @@ function openAreaSummary() {
   });
   function updateResults() {
     const codes = selected.size ? districts.filter(code => selected.has(code)) : districts;
-    const scoped = entries.filter(entry => entry.district && (!selected.size || selected.has(entry.district)));
-    const byDistrict = new Map();
-    for (const entry of scoped) {
-      if (!byDistrict.has(entry.district)) byDistrict.set(entry.district, []);
-      byDistrict.get(entry.district).push(entry);
-    }
     toggle.textContent = selected.size ? 'เลือกไว้ ' + selected.size + ' ' + word : 'เลือกหรือค้นหา' + word + ' (ทุก' + word + ')';
-    result.replaceChildren(element('h3', '', 'รวม ' + codes.length + ' ' + word), element('p', '', areaCounts(scoped)));
     const list = element('div', 'district-results');
-    codes.forEach(code => {
-      list.append(areaSummaryBlock(districtLabel(province, code), byDistrict.get(code) || []));
-    });
-    result.append(list);
+    for (const code of codes) {
+      const status = areaResult(province, code);
+      const card = element('div', 'area-card');
+      card.append(element('strong', '', districtLabel(province, code)),
+        element('span', 'caption ' + areaResultClass(status), status));
+      list.append(card);
+    }
+    result.replaceChildren(list);
   }
   search.addEventListener('input', () => {
     const term = search.value.trim().normalize();
@@ -1168,7 +1162,7 @@ function openAreaSummary() {
   updateResults();
   body.replaceChildren(controls, provincePanel, districtPanel);
   byId('summaryTitle').textContent = 'สรุปการเดินทาง · ' + area.name;
-  showTab(district ? 1 : 0);
+  showTab(0);
   byId('summaryDialog').showModal();
 }
 
@@ -1400,11 +1394,11 @@ function finishEntry(result) {
     selectedCalendarDate = entryRequest.calendarDate;
   }
   if (currentSection === 'field77' && entryRequest?.section === 'field77' && previous?.id &&
-      previous.province === areaView.province && previous.district === areaView.district) {
+      previous.province === areaView.province && !previous.district) {
     const saved = data.field77.find(entry => entry.id === previous.id);
-    if (saved && (saved.province !== previous.province || saved.district !== previous.district)) {
+    if (saved && saved.province !== previous.province) {
       const region = REGIONS.findIndex(([, codes]) => codes.includes(saved.province));
-      if (region >= 0) areaView = { region, province: saved.province, district: saved.district };
+      if (region >= 0) areaView = { region, province: saved.province };
     }
   }
   render();
