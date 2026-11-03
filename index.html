@@ -344,7 +344,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
   <div class="dialog-body" id="detailBody"></div>
 </dialog>
 <dialog id="calendarDeleteDialog" aria-labelledby="calendarDeleteTitle" aria-describedby="calendarDeleteTarget">
-  <div class="dialog-head"><h2 id="calendarDeleteTitle">ยืนยันการลบรายการปฏิทิน</h2></div>
+  <div class="dialog-head"><h2 id="calendarDeleteTitle">ยืนยันการลบเฉพาะวันที่เลือก</h2></div>
   <form method="dialog" class="entry-form">
     <strong id="calendarDeleteTarget"></strong>
     <p id="calendarDeleteError" class="notice error" role="alert" hidden></p>
@@ -1059,7 +1059,8 @@ function appendEntries(panel, key, entries, emptyText) {
     const row = button('item', undefined, () => showDetail(key, entry));
     const when = element('span');
     if (entry.time) when.append(element('span', 'item-time', entry.time));
-    when.append(element('span', entry.time ? 'item-date' : 'item-time', formatDate(entry.date, true)));
+    const date = key === 'calendar' ? selectedCalendarDate : entry.date;
+    when.append(element('span', entry.time ? 'item-date' : 'item-time', formatDate(date, true)));
     const summary = element('span');
     const subtitle = key === 'calendar' ? entry.location :
       [AREAS[entry.province]?.name, entry.district ? districtLabel(entry.province, entry.district) : 'ระดับจังหวัด']
@@ -1075,7 +1076,7 @@ function appendEntries(panel, key, entries, emptyText) {
     row.append(when, summary, badge);
     if (key === 'calendar') {
       const item = element('div', 'calendar-daily-row');
-      const remove = button('secondary-action delete-action', 'ลบ', () => openCalendarDelete(entry));
+      const remove = button('secondary-action delete-action', 'ลบ', () => openCalendarDelete(entry, date));
       remove.setAttribute('aria-label', 'ลบรายการ ' + entryDisplayTitle(key, entry));
       item.append(row, remove);
       panel.append(item);
@@ -1450,15 +1451,13 @@ function showDetail(key, entry) {
   if (!byId('dialog').open) byId('dialog').showModal();
 }
 
-function openCalendarDelete(entry) {
+function openCalendarDelete(entry, date) {
   if (isLoading || isSaving) return;
   const dialog = byId('calendarDeleteDialog');
   const confirm = byId('confirmCalendarDelete');
   const cancel = byId('cancelCalendarDelete');
   const error = byId('calendarDeleteError');
-  const endDate = calendarEndDate(entry);
-  const dates = endDate === entry.date ? formatDate(entry.date) : formatDate(entry.date) + ' ถึง ' + formatDate(endDate);
-  byId('calendarDeleteTarget').textContent = entryDisplayTitle('calendar', entry) + ' · ' + dates;
+  byId('calendarDeleteTarget').textContent = entryDisplayTitle('calendar', entry) + ' · ' + formatDate(date);
   error.hidden = true;
 
   confirm.onclick = async () => {
@@ -1468,12 +1467,23 @@ function openCalendarDelete(entry) {
     confirm.textContent = 'กำลังลบ…';
     error.hidden = true;
     try {
-      if (isPreview) data.calendar = data.calendar.filter(item => item !== entry);
-      else data = await phoenixRequest('deletePhoenixCalendarEntry', { previous: entry });
+      if (isPreview) {
+        const remaining = [];
+        const endDate = calendarEndDate(entry);
+        const day = Date.parse(date);
+        if (entry.date < date) remaining.push({ ...entry, endDate: new Date(day - 86400000).toISOString().slice(0, 10) });
+        if (date < endDate) {
+          const id = remaining.length ? randomPhoenixId() : entry.id;
+          remaining.push({ ...entry, id, date: new Date(day + 86400000).toISOString().slice(0, 10) });
+        }
+        data.calendar = data.calendar.flatMap(item => item === entry ? remaining : [item]);
+      } else {
+        data = await phoenixRequest('deletePhoenixCalendarDay', { previous: entry, date });
+      }
       dialog.close();
       render();
       byId('calendarSelected')?.focus({ preventScroll: true });
-      notice(isPreview ? 'ลบรายการตัวอย่างแล้ว' : 'ลบรายการปฏิทินแล้ว');
+      notice(isPreview ? 'ลบรายการตัวอย่างของวันที่เลือกแล้ว' : 'ลบรายการของวันที่เลือกแล้ว');
       byId('notice').classList.add('success');
     } catch (failure) {
       error.textContent = rpcErrorText(failure);
