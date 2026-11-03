@@ -118,6 +118,19 @@ dialog::backdrop { background: #101c27ad; }
 .dialog-body dd { margin: 0; }
 .dialog-body dt { color: var(--muted); }
 .detail { white-space: pre-wrap; line-height: 1.65; }
+.section-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.primary-action { border: 1px solid #142431; border-radius: 6px; padding: 8px 12px; background: #142431; color: white; font-weight: 700; }
+.primary-action:hover { background: #294354; }
+.entry-form { display: grid; gap: 12px; padding: 16px 20px 20px; }
+.entry-form label { display: grid; gap: 4px; color: var(--ink); font-weight: 700; }
+.entry-form input, .entry-form textarea, .entry-form select { width: 100%; border: 1px solid #c8c7c0; border-radius: 6px; background: white; color: var(--ink); padding: 8px 10px; font: inherit; font-weight: 400; }
+.entry-form textarea { min-height: 92px; resize: vertical; }
+#entryFields { display: grid; gap: 10px; }
+.entry-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
+.entry-form .notice { margin: 0; }
+.related-items { display: grid; gap: 5px; margin-top: 14px; }
+.related-link { color: var(--gold-ink); background: transparent; border: 0; text-align: left; padding: 4px 0; text-decoration: underline; overflow-wrap: anywhere; }
+.notice.success { color: #32614e; background: #e6f1e9; border-color: #c7e0d1; }
 @media (max-width: 900px) {
   .shell { padding-inline: 24px; }
   .workspace { grid-template-columns: 200px minmax(0, 1fr); gap: 20px; }
@@ -208,7 +221,9 @@ dialog::backdrop { background: #101c27ad; }
     <div id="notice" class="notice" role="status" hidden></div>
     <div class="section-head">
       <div><div class="kicker" id="sectionKicker"></div><h2 id="sectionTitle" tabindex="-1"></h2></div>
-      <span id="updated" class="caption"></span>
+      <div class="section-actions"><span id="updated" class="caption"></span>
+        <button id="addEntry" class="primary-action" type="button" hidden>+ เพิ่มข้อมูล</button>
+      </div>
     </div>
     <div id="content"></div>
   </main>
@@ -221,6 +236,22 @@ dialog::backdrop { background: #101c27ad; }
   </div>
   <div class="dialog-body" id="detailBody"></div>
 </dialog>
+<dialog id="entryDialog" aria-labelledby="entryTitle">
+  <div class="dialog-head">
+    <div><div class="kicker">NEW ENTRY</div><h2 id="entryTitle"></h2></div>
+    <button id="closeEntry" class="close" type="button" aria-label="ปิดแบบฟอร์ม">×</button>
+  </div>
+  <form id="entryForm" class="entry-form">
+    <div id="entryFields"></div>
+    <label>เชื่อมโยงกับรายการในเมนูอื่น
+      <select id="entryRelated" name="relatedId"></select>
+    </label>
+    <p id="entryError" class="notice error" role="alert" hidden></p>
+    <div class="entry-actions"><span id="entryState" class="caption" role="status"></span>
+      <button id="saveEntry" class="primary-action" type="submit">บันทึกข้อมูล</button>
+    </div>
+  </form>
+</dialog>
 <script>
 'use strict';
 
@@ -231,6 +262,19 @@ const SECTIONS = {
   approvals: { label: 'เรื่องเสนอพิจารณา', english: 'DECISION QUEUE', empty: 'ยังไม่มีเรื่องเสนอพิจารณา' },
   missions: { label: 'ภารกิจ', english: 'MISSION TRACKER', empty: 'ยังไม่มีภารกิจ' },
   briefings: { label: 'รายงานสรุป', english: 'BRIEFINGS', empty: 'ยังไม่มีรายงานสรุป' },
+};
+const ENTRY_FIELDS = {
+  profile: [['title', 'หัวข้อข้อมูล'], ['details', 'รายละเอียด']],
+  agenda: [['date', 'วันที่'], ['time', 'เวลา'], ['title', 'หัวข้อ'], ['location', 'สถานที่'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
+  approvals: [['date', 'วันที่เสนอ'], ['title', 'เรื่อง'], ['unit', 'หน่วยงาน'], ['priority', 'ความเร่งด่วน'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
+  missions: [['date', 'วันครบกำหนด'], ['title', 'ภารกิจ'], ['unit', 'หน่วยงาน'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
+  briefings: [['date', 'วันที่รายงาน'], ['title', 'หัวข้อ'], ['unit', 'หน่วยงาน'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
+};
+const STATUS_OPTIONS = {
+  agenda: ['รอยืนยัน', 'ยืนยันแล้ว', 'ยกเลิก'],
+  approvals: ['รอพิจารณา', 'อนุมัติ', 'ไม่อนุมัติ', 'พิจารณาแล้ว', 'ถอนเรื่อง', 'ยกเลิก'],
+  missions: ['ยังไม่เริ่ม', 'กำลังดำเนินการ', 'เสร็จสิ้น', 'ยกเลิก'],
+  briefings: ['ฉบับร่าง', 'ฉบับสรุป', 'เสร็จสิ้น'],
 };
 const APPROVAL_CLOSED = ['อนุมัติ', 'ไม่อนุมัติ', 'พิจารณาแล้ว', 'ถอนเรื่อง', 'ยกเลิก'];
 const MISSION_CLOSED = ['เสร็จสิ้น', 'ยกเลิก'];
@@ -248,6 +292,8 @@ let data = null;
 let currentSection = 'home';
 let currentFilter = 'all';
 let isLoading = false;
+let isSaving = false;
+let entryRequest = null;
 
 function dateKey(now) {
   const parts = Object.fromEntries(BANGKOK_DATE.formatToParts(now).map(part => [part.type, part.value]));
@@ -318,6 +364,7 @@ function setupNavigation() {
 
 function notice(text, error = false) {
   const node = byId('notice');
+  node.classList.remove('success');
   node.textContent = text;
   node.classList.toggle('error', error);
   node.hidden = !text;
@@ -329,9 +376,14 @@ function connection(state, label) {
 }
 
 function refresh() {
-  if (isLoading) return;
+  if (isLoading || isSaving) return;
   if (!isAppsScript) {
-    data = sampleData(new Date());
+    if (!data) {
+      data = sampleData(new Date());
+      for (const key of Object.keys(ENTRY_FIELDS)) {
+        data[key].forEach((entry, index) => { entry.id = key + '-' + index; });
+      }
+    }
     connection('demo', 'โหมดตัวอย่าง');
     notice('ข้อมูลบนหน้านี้เป็นตัวอย่างสำหรับดูหน้าตาเว็บ');
     render();
@@ -349,7 +401,7 @@ function refresh() {
   }).withFailureHandler(error => {
     finishRefresh('error', 'โหลดข้อมูลไม่สำเร็จ');
     notice((data ? 'กำลังแสดงข้อมูลจากการโหลดครั้งล่าสุด · ' : '') +
-      (error?.message || 'กรุณาลองกดอัปเดตข้อมูลอีกครั้ง'), true);
+      rpcErrorText(error), true);
     if (!data) render();
   }).getPhoenixDashboard();
 }
@@ -368,6 +420,7 @@ function render() {
   const isHome = currentSection === 'home';
   document.body.dataset.page = currentSection;
   byId('sidebar').hidden = isHome;
+  byId('addEntry').hidden = isHome || !data;
   byId('menuToggle').hidden = isHome;
   byId('sectionTitle').textContent = isHome ? 'เมนูส่วนตัว' : section.label;
   byId('sectionKicker').textContent = section.english;
@@ -433,13 +486,14 @@ function renderPortal(target) {
 function renderProfile(target) {
   const panel = element('section', 'panel');
   if (data.profile.length === 0) {
-    panel.append(element('p', 'empty', 'ยังไม่มีข้อมูลผู้บัญชาการ เพิ่มหัวข้อและรายละเอียดได้ในแท็บข้อมูลผู้บัญชาการ'));
+    panel.append(element('p', 'empty', 'ยังไม่มีข้อมูลผู้บัญชาการ กดเพิ่มข้อมูลเพื่อบันทึกหัวข้อแรก'));
   } else {
     const fields = element('dl', 'profile-fields');
-    data.profile.forEach(entry => fields.append(
-      element('dt', '', entry.title),
-      element('dd', '', entry.details || '—'),
-    ));
+    data.profile.forEach(entry => {
+      const details = element('dd', '', entry.details || '—');
+      appendRelated(details, entry);
+      fields.append(element('dt', '', entry.title), details);
+    });
     panel.append(fields);
   }
   target.append(panel);
@@ -512,7 +566,7 @@ function showDetail(key, entry) {
   const body = byId('detailBody');
   const list = element('dl');
   const dateLabels = { agenda: 'วันที่', approvals: 'วันที่เสนอ', missions: 'วันครบกำหนด', briefings: 'วันที่รายงาน' };
-  const pairs = [[dateLabels[key], formatDate(entry.date)], ['เวลา', entry.time],
+  const pairs = [[dateLabels[key], dateLabels[key] && formatDate(entry.date)], ['เวลา', entry.time],
     ['สถานที่', entry.location], ['หน่วยงาน', entry.unit],
     ['ความเร่งด่วน', entry.priority], ['สถานะ', entry.status]];
   pairs.forEach(([label, value]) => {
@@ -520,7 +574,123 @@ function showDetail(key, entry) {
   });
   body.replaceChildren(list);
   if (entry.details) body.append(element('h3', '', 'รายละเอียด'), element('p', 'detail', entry.details));
-  byId('dialog').showModal();
+  appendRelated(body, entry);
+  if (!byId('dialog').open) byId('dialog').showModal();
+}
+
+function appendRelated(target, entry) {
+  if (!entry.id) return;
+  const list = element('div', 'related-items');
+  for (const key of Object.keys(ENTRY_FIELDS)) {
+    for (const other of data[key]) {
+      if (!other.id || other.id === entry.id ||
+          (entry.relatedId !== other.id && other.relatedId !== entry.id)) continue;
+      list.append(button('related-link', SECTIONS[key].label + ' · ' + other.title, () => showDetail(key, other)));
+    }
+  }
+  if (list.childElementCount) {
+    list.prepend(element('strong', 'caption', 'รายการที่เกี่ยวข้อง'));
+    target.append(list);
+  }
+}
+
+function rpcErrorText(error) {
+  const message = error?.message || '';
+  return !message || /unknown error|server error/i.test(message)
+    ? 'Apps Script ตอบกลับไม่สำเร็จ ลองอีกครั้ง หากยังพบปัญหาให้เปิด Apps Script → Executions แล้วดูรายละเอียดรอบที่ล้มเหลว'
+    : message;
+}
+
+function openEntryForm() {
+  if (!data || !ENTRY_FIELDS[currentSection]) return;
+  const id = Array.from(crypto.getRandomValues(new Uint8Array(16)),
+    byte => byte.toString(16).padStart(2, '0')).join('');
+  entryRequest = { section: currentSection, id };
+  byId('entryTitle').textContent = 'เพิ่มข้อมูล · ' + SECTIONS[currentSection].label;
+  const fields = byId('entryFields');
+  fields.replaceChildren();
+  for (const [field, title] of ENTRY_FIELDS[currentSection]) {
+    const label = element('label', '', title);
+    const choices = field === 'priority' ? ['ปกติ', 'ด่วน', 'ด่วนที่สุด']
+      : field === 'status' ? STATUS_OPTIONS[currentSection] : null;
+    const control = element(choices ? 'select' : field === 'details' ? 'textarea' : 'input');
+    control.name = field;
+    if (choices) {
+      control.append(new Option('ไม่ระบุ', ''));
+      choices.forEach(choice => control.append(new Option(choice, choice)));
+    } else if (field === 'date' || field === 'time') {
+      control.type = field;
+    } else {
+      control.maxLength = field === 'details' ? 8000 : 300;
+    }
+    control.required = field === 'title';
+    label.append(control);
+    fields.append(label);
+  }
+
+  const links = byId('entryRelated');
+  links.replaceChildren(new Option('ไม่เชื่อมโยง', ''));
+  for (const key of Object.keys(ENTRY_FIELDS)) {
+    if (key === currentSection) continue;
+    const group = element('optgroup');
+    group.label = SECTIONS[key].label;
+    data[key].filter(entry => entry.id).forEach(entry => {
+      const date = entry.date ? ' · ' + formatDate(entry.date, true) : '';
+      group.append(new Option(entry.title + date, entry.id));
+    });
+    if (group.childElementCount) links.append(group);
+  }
+  byId('entryError').hidden = true;
+  byId('entryDialog').showModal();
+  fields.querySelector('[name="title"]').focus();
+}
+
+function setSaving(saving) {
+  isSaving = saving;
+  for (const control of byId('entryForm').elements) control.disabled = saving;
+  byId('closeEntry').disabled = saving;
+  byId('entryState').textContent = saving ? 'กำลังบันทึก…' : '';
+}
+
+function submitEntry(event) {
+  event.preventDefault();
+  if (isSaving || !entryRequest) return;
+  const fields = Object.fromEntries(new FormData(event.currentTarget));
+  const relatedId = fields.relatedId;
+  delete fields.relatedId;
+  if (!fields.title.trim()) {
+    entryError('กรุณากรอกหัวข้อ');
+    return;
+  }
+  const request = { ...entryRequest, fields, relatedId };
+  byId('entryError').hidden = true;
+  setSaving(true);
+  if (!isAppsScript) {
+    data[request.section].push({ ...fields, id: request.id, relatedId });
+    data.updatedAt = BANGKOK_TIME.format(new Date());
+    finishEntry(data);
+    return;
+  }
+  google.script.run.withSuccessHandler(finishEntry).withFailureHandler(error => {
+    setSaving(false);
+    entryError(rpcErrorText(error));
+  }).addPhoenixEntry(request);
+}
+
+function entryError(message) {
+  const node = byId('entryError');
+  node.textContent = message;
+  node.hidden = false;
+}
+
+function finishEntry(result) {
+  data = result;
+  setSaving(false);
+  byId('entryDialog').close();
+  currentFilter = 'all';
+  render();
+  notice(isAppsScript ? 'บันทึกข้อมูลลง Google Sheets แล้ว' : 'เพิ่มข้อมูลตัวอย่างแล้ว ข้อมูลจะหายเมื่อปิดหรือโหลดหน้านี้ใหม่');
+  byId('notice').classList.add('success');
 }
 
 function sampleData(now) {
@@ -559,6 +729,12 @@ function sampleData(now) {
 }
 
 setupNavigation();
+byId('addEntry').addEventListener('click', openEntryForm);
+byId('closeEntry').addEventListener('click', () => byId('entryDialog').close());
+byId('entryDialog').addEventListener('cancel', event => {
+  if (isSaving) event.preventDefault();
+});
+byId('entryForm').addEventListener('submit', submitEntry);
 byId('menuToggle').addEventListener('click', () => {
   const open = byId('menuToggle').getAttribute('aria-expanded') === 'true';
   setMobileMenu(!open);
