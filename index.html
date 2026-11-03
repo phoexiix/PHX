@@ -46,6 +46,8 @@ button:disabled { cursor: wait; opacity: .65; }
 h1 { font-size: clamp(28px, 4vw, 48px); margin: 11px 0 7px; line-height: 1.22; letter-spacing: -.025em; }
 .hero-schedule { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
 .hero-date { padding: 4px 9px; border: 1px solid #ffffff40; border-radius: 5px; color: #f5e5c7; font-size: 12px; }
+#simulationTrigger { background: transparent; color: inherit; }
+#simulationTrigger:disabled { cursor: default; opacity: 1; }
 .hero-schedule .calendar-tag { font-size: 12px; }
 .hero p { margin: 0 0 21px; color: #e0e8ed; font-size: 15px; }
 .mast-actions { display: flex; align-items: center; gap: 16px; }
@@ -345,7 +347,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
     <h1 id="siteTitle">ผู้บัญชาการสูงสุด</h1>
     <p>พื้นสำหรับดูข้อมูลและติดตามงานของผู้บัญชาการสูงสุด</p>
     <div class="hero-schedule" aria-label="วันที่และสถานะตามปฏิทิน">
-      <time id="homeDate" class="hero-date"></time>
+      <button type="button" id="simulationTrigger" class="hero-date" aria-haspopup="dialog" disabled><time id="homeDate"></time></button>
       <span id="homeSchedule" class="hero-schedule" aria-live="polite"></span>
     </div>
   </div>
@@ -379,6 +381,19 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
     <form method="dialog"><button type="submit" class="close" aria-label="ปิดรายละเอียด" autofocus>×</button></form>
   </div>
   <div class="dialog-body" id="detailBody"></div>
+</dialog>
+<dialog id="simulationDialog" aria-labelledby="simulationTitle" aria-describedby="simulationSummary">
+  <div class="dialog-head"><h2 id="simulationTitle">เลื่อนวันจำลอง</h2></div>
+  <form id="simulationForm" class="entry-form">
+    <strong id="simulationSummary"></strong>
+    <p class="caption">เมื่อยืนยันแล้วจะย้อนวันจำลองกลับไม่ได้</p>
+    <label>รหัสยืนยัน <input id="simulationPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required autofocus></label>
+    <p id="simulationError" class="notice error" role="alert" hidden></p>
+    <div class="entry-actions">
+      <button id="simulationCancel" type="button" class="secondary-action">ยกเลิก</button>
+      <button id="simulationConfirm" type="submit" class="primary-action">ยืนยันเลื่อนวัน</button>
+    </div>
+  </form>
 </dialog>
 <dialog id="calendarDeleteDialog" aria-labelledby="calendarDeleteTitle" aria-describedby="calendarDeleteTarget">
   <div class="dialog-head"><h2 id="calendarDeleteTitle">ยืนยันการลบเฉพาะวันที่เลือก</h2></div>
@@ -553,9 +568,6 @@ const AREAS = {
 
 const DATE_FORMAT = new Intl.DateTimeFormat('th-TH', { dateStyle: 'full', timeZone: 'UTC' });
 const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const BANGKOK_DATE = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
-});
 const BANGKOK_TIME = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit',
 });
@@ -563,6 +575,7 @@ const byId = id => document.getElementById(id);
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwUw5M1KloGCtU2sLwjWju7-XRAWnpmbVtjKyWMPg29z9vcBsugJTe8lWtmMuEIhyD5/exec';
 const GITHUB_PAGES_ORIGIN = 'https://phoexiix.github.io';
 const BRIDGE_PROTOCOL = 'phoenix-bridge-v1';
+const SIMULATION_START = '2026-11-03';
 const GAS_ORIGIN = /^https:\/\/(?:script\.google\.com|(?:[a-z0-9-]+[.-])?script\.googleusercontent\.com)$/i;
 const isAppsScript = Boolean(window.google?.script?.run);
 const isPreview = !isAppsScript && (location.protocol === 'file:' ||
@@ -672,11 +685,6 @@ let entryRequest = null;
 let selectedCalendarDate = '';
 let areaView = { region: -1, province: '' };
 
-function dateKey(now) {
-  const parts = Object.fromEntries(BANGKOK_DATE.formatToParts(now).map(part => [part.type, part.value]));
-  return parts.year + '-' + parts.month + '-' + parts.day;
-}
-
 function isDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
   const date = new Date(value + 'T00:00:00Z');
@@ -754,7 +762,7 @@ function connection(state, label) {
 
 function refresh() {
   if (isLoading || isSaving || byId('entryDialog').open || byId('reportDialog').open ||
-      byId('calendarDeleteDialog').open) return;
+      byId('calendarDeleteDialog').open || byId('simulationDialog').open) return;
   if (isPreview) {
     if (!data) {
       data = sampleData(new Date());
@@ -769,6 +777,7 @@ function refresh() {
   }
   isLoading = true;
   byId('refresh').disabled = true;
+  byId('simulationTrigger').disabled = true;
   byId('addEntry').disabled = true;
   byId('areaReport').disabled = true;
   byId('content').setAttribute('aria-busy', 'true');
@@ -781,6 +790,7 @@ function refresh() {
       if (!data) render();
       return;
     }
+    if (data && result.today !== data.today) selectedCalendarDate = result.today;
     data = result;
     finishRefresh('ready', 'เชื่อมต่อ Google Sheets');
     render();
@@ -795,6 +805,7 @@ function refresh() {
 function finishRefresh(state, label) {
   isLoading = false;
   byId('refresh').disabled = false;
+  byId('simulationTrigger').disabled = !data?.simulationEnabled;
   byId('addEntry').disabled = false;
   byId('areaReport').disabled = false;
   byId('content').setAttribute('aria-busy', 'false');
@@ -1121,10 +1132,12 @@ function isActive(entry) {
 }
 
 function renderOverview(target) {
-  const today = data?.today || dateKey(new Date());
+  const today = data?.today || SIMULATION_START;
+  byId('simulationTrigger').disabled = !data?.simulationEnabled || isLoading || isSaving;
   const date = byId('homeDate');
   date.dateTime = today;
   date.textContent = formatDate(today);
+  byId('simulationTrigger').setAttribute('aria-label', formatDate(today) + ' · เลื่อนวันจำลอง');
   const schedule = byId('homeSchedule');
   const categories = new Set((data?.calendar || [])
     .filter(entry => isDate(entry.date) && entry.date <= today && calendarEndDate(entry) >= today)
@@ -2179,7 +2192,7 @@ function finishEntry(result) {
 }
 
 function sampleData(now) {
-  const today = dateKey(now);
+  const today = SIMULATION_START;
   return {
     today, updatedAt: BANGKOK_TIME.format(now), areaReports: {},
     profile: [
@@ -2198,7 +2211,57 @@ function sampleData(now) {
   };
 }
 
+function openSimulationDialog() {
+  if (!data?.simulationEnabled || isLoading || isSaving) return;
+  const next = new Date(data.today + 'T00:00:00Z');
+  next.setUTCDate(next.getUTCDate() + 1);
+  const dialog = byId('simulationDialog');
+  dialog.dataset.expectedDate = data.today;
+  byId('simulationForm').reset();
+  byId('simulationError').hidden = true;
+  byId('simulationSummary').textContent = formatDate(data.today) + ' → ' + formatDate(next.toISOString().slice(0, 10));
+  dialog.showModal();
+}
+
+async function submitSimulationDay(event) {
+  event.preventDefault();
+  if (isSaving) return;
+  const dialog = byId('simulationDialog');
+  const pin = byId('simulationPin');
+  const confirm = byId('simulationConfirm');
+  const cancel = byId('simulationCancel');
+  const errorMessage = byId('simulationError');
+  const payload = { expectedDate: dialog.dataset.expectedDate, pin: pin.value };
+  pin.value = '';
+  errorMessage.hidden = true;
+  isSaving = true;
+  pin.disabled = confirm.disabled = cancel.disabled = true;
+  try {
+    const result = await phoenixRequest('advancePhoenixSimulationDay', payload);
+    if (!isDate(result?.today) || result.today < payload.expectedDate) throw new Error('ไม่ได้รับวันที่จำลองที่ถูกต้อง');
+    data.today = result.today;
+    selectedCalendarDate = result.today;
+    dialog.close();
+    notice(result.advanced ? 'เลื่อนวันจำลองเป็น ' + formatDate(result.today) :
+      'วันที่จำลองถูกเลื่อนจากหน้าต่างอื่นแล้ว · ' + formatDate(result.today));
+  } catch (error) {
+    errorMessage.textContent = rpcErrorText(error);
+    errorMessage.hidden = false;
+  } finally {
+    isSaving = false;
+    pin.disabled = confirm.disabled = cancel.disabled = false;
+    if (dialog.open) pin.focus();
+    else render();
+  }
+}
+
 setupNavigation();
+byId('simulationTrigger').addEventListener('click', openSimulationDialog);
+byId('simulationForm').addEventListener('submit', submitSimulationDay);
+byId('simulationCancel').addEventListener('click', () => byId('simulationDialog').close());
+byId('simulationDialog').addEventListener('cancel', event => {
+  if (isSaving) event.preventDefault();
+});
 byId('addEntry').addEventListener('click', () => openEntryForm());
 byId('areaReport').addEventListener('click', openAreaReport);
 byId('closeReport').addEventListener('click', () => byId('reportDialog').close());
