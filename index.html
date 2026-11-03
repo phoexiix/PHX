@@ -126,6 +126,8 @@ dialog::backdrop { background: #101c27ad; }
 #entryFields { display: grid; gap: 10px; }
 .entry-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
 .entry-form .notice { margin: 0; }
+.delete-action { color: #8b1425; border-color: #cb9ba3; }
+#detailBody .delete-action { margin-inline-start: 8px; }
 .related-items { display: grid; gap: 5px; margin-top: 14px; }
 .related-link { color: var(--gold-ink); background: transparent; border: 0; text-align: left; padding: 4px 0; text-decoration: underline; overflow-wrap: anywhere; }
 .notice.success { color: #32614e; background: #e6f1e9; border-color: #c7e0d1; }
@@ -336,6 +338,17 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
     <form method="dialog"><button type="submit" class="close" aria-label="ปิดรายละเอียด" autofocus>×</button></form>
   </div>
   <div class="dialog-body" id="detailBody"></div>
+</dialog>
+<dialog id="calendarDeleteDialog" aria-labelledby="calendarDeleteTitle" aria-describedby="calendarDeleteTarget">
+  <div class="dialog-head"><h2 id="calendarDeleteTitle">ยืนยันการลบรายการปฏิทิน</h2></div>
+  <form method="dialog" class="entry-form">
+    <strong id="calendarDeleteTarget"></strong>
+    <p id="calendarDeleteError" class="notice error" role="alert" hidden></p>
+    <div class="entry-actions">
+      <button id="cancelCalendarDelete" type="submit" class="secondary-action" autofocus>ยกเลิก</button>
+      <button id="confirmCalendarDelete" type="button" class="secondary-action delete-action">ยืนยันการลบ</button>
+    </div>
+  </form>
 </dialog>
 <dialog id="entryDialog" aria-labelledby="entryTitle">
   <div class="dialog-head">
@@ -698,7 +711,8 @@ function connection(state, label) {
 }
 
 function refresh() {
-  if (isLoading || isSaving || byId('entryDialog').open || byId('reportDialog').open) return;
+  if (isLoading || isSaving || byId('entryDialog').open || byId('reportDialog').open ||
+      byId('calendarDeleteDialog').open) return;
   if (isPreview) {
     if (!data) {
       data = sampleData(new Date());
@@ -824,8 +838,8 @@ function calendarTypeLabel(category) {
 }
 
 function entryDisplayTitle(key, entry) {
-  return key === 'calendar' && entry.category === CALENDAR_BASE_TYPE && entry.title === CALENDAR_BASE_TYPE
-    ? CALENDAR_BASE_LABEL : entry.title;
+  return key === 'calendar' && Object.hasOwn(CALENDAR_TYPES, entry.category)
+    ? calendarTypeLabel(entry.category) : entry.title;
 }
 
 function calendarCategory(category) {
@@ -1421,7 +1435,47 @@ function showDetail(key, entry) {
     if (byId('summaryDialog').open) byId('summaryDialog').close();
     openEntryForm(key, current);
   }));
+  if (key === 'calendar') {
+    body.append(button('secondary-action delete-action', 'ลบรายการ', () => openCalendarDelete(entry)));
+  }
   if (!byId('dialog').open) byId('dialog').showModal();
+}
+
+function openCalendarDelete(entry) {
+  if (isLoading || isSaving) return;
+  const dialog = byId('calendarDeleteDialog');
+  const confirm = byId('confirmCalendarDelete');
+  const cancel = byId('cancelCalendarDelete');
+  const error = byId('calendarDeleteError');
+  const endDate = calendarEndDate(entry);
+  const dates = endDate === entry.date ? formatDate(entry.date) : formatDate(entry.date) + ' ถึง ' + formatDate(endDate);
+  byId('calendarDeleteTarget').textContent = entryDisplayTitle('calendar', entry) + ' · ' + dates;
+  error.hidden = true;
+
+  confirm.onclick = async () => {
+    if (isLoading || isSaving) return;
+    isSaving = true;
+    confirm.disabled = cancel.disabled = true;
+    confirm.textContent = 'กำลังลบ…';
+    error.hidden = true;
+    try {
+      if (isPreview) data.calendar = data.calendar.filter(item => item !== entry);
+      else data = await phoenixRequest('deletePhoenixCalendarEntry', { previous: entry });
+      dialog.close();
+      byId('dialog').close();
+      render();
+      notice(isPreview ? 'ลบรายการตัวอย่างแล้ว' : 'ลบรายการปฏิทินแล้ว');
+      byId('notice').classList.add('success');
+    } catch (failure) {
+      error.textContent = rpcErrorText(failure);
+      error.hidden = false;
+    } finally {
+      isSaving = false;
+      confirm.disabled = cancel.disabled = false;
+      confirm.textContent = 'ยืนยันการลบ';
+    }
+  };
+  dialog.showModal();
 }
 
 function appendRelated(target, entry) {
@@ -1567,7 +1621,7 @@ function submitEntry(event) {
       entryError('กรุณาเลือกประเภทตารางงาน');
       return;
     }
-    fields.title = (sameCategory && previous.title) || calendarTypeLabel(fields.category);
+    fields.title = entryDisplayTitle(section, { category: fields.category, title: previous?.title });
     if (previous) {
       fields.time = previous.time;
       fields.location = previous.location;
@@ -1664,6 +1718,9 @@ byId('entryDialog').addEventListener('cancel', event => {
   if (isSaving) event.preventDefault();
 });
 byId('entryForm').addEventListener('submit', submitEntry);
+byId('calendarDeleteDialog').addEventListener('cancel', event => {
+  if (isSaving) event.preventDefault();
+});
 byId('menuToggle').addEventListener('click', () => {
   const open = byId('menuToggle').getAttribute('aria-expanded') === 'true';
   setMobileMenu(!open);
