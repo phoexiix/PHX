@@ -190,27 +190,46 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .calendar-head h3, .calendar-daily h3 { margin: 0; }
 .calendar-head button { min-width: 36px; font-size: 17px; }
 .calendar-legend { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
-.calendar-grid { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.calendar-grid {
+  --calendar-day-height: 92px;
+  --calendar-pad-x: 5px;
+  --calendar-pad-y: 5px;
+  --calendar-number-height: 18px;
+  --calendar-status-height: 20px;
+  --calendar-gap: 3px;
+  width: 100%; table-layout: fixed; border-collapse: collapse;
+}
 .calendar-grid th { padding: 7px 2px; color: var(--muted); background: #faf9f6; border-block: 1px solid var(--line); }
-.calendar-grid td { padding: 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+.calendar-grid td { position: relative; height: var(--calendar-day-height); padding: 0; vertical-align: top; border-bottom: 1px solid var(--line); }
 .calendar-grid td + td { border-left: 1px solid var(--line); }
-.calendar-grid tbody + tbody { border-top: 1px solid var(--line); }
-.calendar-grid tbody tr:last-child td { border-bottom: 0; }
-.calendar-grid .calendar-range-row td { height: 26px; padding: 2px 0; border-bottom: 0; }
-.calendar-range-row .calendar-range-cell { border-inline: 0; }
-.calendar-range { display: block; width: 100%; border: 0; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.calendar-grid tbody:last-child td { border-bottom: 0; }
+.calendar-grid .calendar-range {
+  position: absolute; z-index: 1; display: block;
+  top: calc(var(--calendar-pad-y) + var(--calendar-number-height) + var(--calendar-gap) + var(--track) * (var(--calendar-status-height) + var(--calendar-gap)));
+  left: var(--calendar-pad-x);
+  width: calc((100% + 1px) * var(--span) - 1px - 2 * var(--calendar-pad-x));
+  max-width: none;
+  height: var(--calendar-status-height);
+  border: 0; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
 .calendar-range.continues-left { border-start-start-radius: 0; border-end-start-radius: 0; }
 .calendar-range.continues-right { border-start-end-radius: 0; border-end-end-radius: 0; }
-.calendar-week-ranges .calendar-day { min-height: 34px; }
 
 .calendar-outside { background: #faf9f6; }
-.calendar-day { display: flex; flex-direction: column; gap: 3px; align-items: stretch; width: 100%; min-height: 92px; padding: 5px; border: 0; background: white; color: var(--ink); text-align: left; }
+.calendar-day {
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: var(--calendar-number-height) repeat(2, var(--calendar-status-height)) 10px;
+  gap: var(--calendar-gap); width: 100%; height: var(--calendar-day-height);
+  padding: var(--calendar-pad-y) var(--calendar-pad-x); border: 0;
+  background: white; color: var(--ink); text-align: left;
+}
 .calendar-day:hover { background: #faf6eb; }
 .calendar-day[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #b88b55; background: #fffaf0; }
 .calendar-day:focus-visible { outline-offset: -3px; }
-.calendar-number { padding: 0 2px; }
+.calendar-number { grid-row: 1; padding: 0 2px; line-height: var(--calendar-number-height); }
 .calendar-tag { display: inline-block; max-width: 100%; padding: 3px 5px; border-radius: 4px; background: #edf1f4; color: #304b5d; font-size: 11px; }
-.calendar-day .calendar-tag { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.calendar-day .calendar-tag { grid-row: var(--status-row); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.calendar-day .calendar-tag, .calendar-grid .calendar-range { line-height: 14px; }
 .calendar-tag.abroad { background: #efe6fa; color: #653a88; }
 .calendar-tag.base { background: #e3f0e8; color: #285e44; }
 .calendar-tag.duty-front { background: #d3f2ed; color: #075c51; }
@@ -220,12 +239,18 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .calendar-tag.domestic { background: #faedda; color: #764917; }
 .calendar-tag.international { background: #e2eefb; color: #23578d; }
 .calendar-tag.off-duty { background: #fbe7e8; color: #8e2634; }
-.calendar-more { padding-left: 2px; color: var(--muted); font-size: 10px; }
+.calendar-more { grid-row: 4; padding-left: 2px; color: var(--muted); font-size: 10px; line-height: 10px; }
 .calendar-daily { margin-top: 14px; }
 .calendar-daily .panel-head button { flex: none; }
 @media (max-width: 690px) {
-  .calendar-day { padding: 4px 2px; min-height: 76px; }
-  .calendar-day .calendar-tag { font-size: 10px; padding: 2px 3px; }
+  .calendar-grid {
+    --calendar-day-height: 76px;
+    --calendar-pad-x: 2px;
+    --calendar-pad-y: 4px;
+    --calendar-number-height: 16px;
+    --calendar-status-height: 16px;
+  }
+  .calendar-day .calendar-tag, .calendar-grid .calendar-range { font-size: 10px; line-height: 12px; padding: 2px 3px; }
 }
 </style>
 </head>
@@ -840,7 +865,10 @@ function selectCalendarDay(date) {
   byId('calendarSelected').focus();
 }
 
-function renderCalendarRangeRows(body, dates, ranges) {
+const CALENDAR_VISIBLE_TRACKS = 2;
+
+function renderCalendarRanges(cells, dates, ranges) {
+  const daySlots = dates.map(() => ({ occupied: new Set(), hidden: 0 }));
   const lanes = [];
   for (const entry of ranges) {
     const endDate = calendarEndDate(entry);
@@ -852,18 +880,14 @@ function renderCalendarRangeRows(body, dates, ranges) {
     if (lane) lane.push(segment);
     else lanes.push([segment]);
   }
-  for (const lane of lanes) {
-    const row = body.insertRow();
-    row.className = 'calendar-range-row';
-    let column = 0;
+  lanes.forEach((lane, track) => {
+    const visible = track < CALENDAR_VISIBLE_TRACKS;
     for (const { entry, start, end, endDate } of lane) {
-      while (column < start) {
-        row.insertCell();
-        column += 1;
+      for (let column = start; column <= end; column += 1) {
+        if (visible) daySlots[column].occupied.add(track);
+        else daySlots[column].hidden += 1;
       }
-      const cell = row.insertCell();
-      cell.className = 'calendar-range-cell';
-      cell.colSpan = end - start + 1;
+      if (!visible) continue;
       const classes = ['calendar-tag', 'calendar-range', calendarCategory(entry.category)];
       if (entry.date < dates[start]) classes.push('continues-left');
       if (endDate > dates[end]) classes.push('continues-right');
@@ -880,15 +904,12 @@ function renderCalendarRangeRows(body, dates, ranges) {
       bar.title = [category, title].filter(Boolean).join(' · ');
       bar.setAttribute('aria-label', [title, category, formatDate(entry.date), formatDate(endDate)]
         .filter(Boolean).join(' · '));
-      cell.append(bar);
-      column = end + 1;
+      bar.style.setProperty('--track', track);
+      bar.style.setProperty('--span', end - start + 1);
+      cells[start].append(bar);
     }
-    while (column < 7) {
-      row.insertCell();
-      column += 1;
-    }
-  }
-  if (lanes.length) body.classList.add('calendar-week-ranges');
+  });
+  return daySlots;
 }
 
 function renderCalendar(target) {
@@ -940,35 +961,42 @@ function renderCalendar(target) {
   const firstColumn = month.getUTCDay();
   const rows = Math.ceil((firstColumn + lastDay) / 7);
   for (let week = 0; week < rows; week += 1) {
-    const body = calendar.createTBody();
-    const dates = Array(7).fill('');
-    const row = body.insertRow();
-    for (let column = 0; column < 7; column += 1) {
-      const cell = row.insertCell();
+    const row = calendar.createTBody().insertRow();
+    const dates = Array.from({ length: 7 }, (_, column) => {
       const day = week * 7 + column - firstColumn + 1;
-      if (day < 1 || day > lastDay) {
+      return day < 1 || day > lastDay ? '' : monthKey + '-' + String(day).padStart(2, '0');
+    });
+    const cells = dates.map(() => row.insertCell());
+    const daySlots = renderCalendarRanges(cells, dates, ranges);
+    dates.forEach((date, column) => {
+      const cell = cells[column];
+      if (!date) {
         cell.className = 'calendar-outside';
-        continue;
+        return;
       }
-      const date = monthKey + '-' + String(day).padStart(2, '0');
-      dates[column] = date;
+      const day = Number(date.slice(-2));
       const entries = entriesFor(date);
       const singleDayEntries = entries.filter(entry => calendarEndDate(entry) === entry.date && !groupedEntries.has(entry));
       const control = button('calendar-day', undefined, () => selectCalendarDay(date));
       control.setAttribute('aria-pressed', String(date === selectedCalendarDate));
       control.setAttribute('aria-label', formatDate(date) + ' · ' + entries.length + ' รายการ');
       control.append(element('strong', 'calendar-number', String(day)));
-      singleDayEntries.slice(0, 2).forEach(entry => {
+      const { occupied, hidden } = daySlots[column];
+      let shown = 0;
+      for (let track = 0; track < CALENDAR_VISIBLE_TRACKS && shown < singleDayEntries.length; track += 1) {
+        if (occupied.has(track)) continue;
+        const entry = singleDayEntries[shown++];
         const title = entryDisplayTitle('calendar', entry);
         const tag = element('span', 'calendar-tag ' + calendarCategory(entry.category),
           [entry.time, title].filter(Boolean).join(' '));
         tag.title = [calendarTypeLabel(entry.category), title].filter(Boolean).join(' · ');
+        tag.style.setProperty('--status-row', track + 2);
         control.append(tag);
-      });
-      if (singleDayEntries.length > 2) control.append(element('span', 'calendar-more', '+' + (singleDayEntries.length - 2)));
-      cell.append(control);
-    }
-    renderCalendarRangeRows(body, dates, ranges);
+      }
+      const more = hidden + singleDayEntries.length - shown;
+      if (more) control.append(element('span', 'calendar-more', '+' + more));
+      cell.prepend(control);
+    });
   }
   panel.append(head, legend, calendar);
   target.append(panel);
