@@ -85,6 +85,8 @@ h3 { font-size: 17px; margin: 4px 0 0; }
 .panel { background: white; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .panel-head { padding: 16px 17px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .item { display: grid; grid-template-columns: 67px minmax(0,1fr) auto; width: 100%; align-items: center; gap: 12px; padding: 13px 17px; min-height: 68px; background: white; border: 0; color: var(--ink); text-align: left; }
+.item.profile-item { grid-template-columns: minmax(0, 1fr); }
+.profile-item .caption { white-space: pre-wrap; }
 .item + .item { border-top: 1px solid #eeece6; }
 .item:focus-visible { outline-offset: -3px; }
 .item strong, .item .caption { display: block; overflow-wrap: anywhere; }
@@ -160,7 +162,6 @@ dialog::backdrop { background: #101c27ad; }
 .area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .area-records { margin-top: 14px; }
 .area-records h3 { margin: 0; }
-.area-form-note { margin: 0; padding: 8px 10px; background: #faf5ea; border-radius: 6px; color: var(--gold-ink); }
 .names-group { border: 1px solid var(--line); border-radius: 6px; margin: 0; min-width: 0; padding: 8px; }
 .names-group legend { padding: 0 4px; font-weight: 700; }
 .name-rows { display: grid; gap: 5px; }
@@ -193,6 +194,7 @@ dialog::backdrop { background: #101c27ad; }
       <path fill="currentColor" d="M7 53 23 61 40 69 47 84 23 73ZM93 53 77 61 60 69 53 84 77 73ZM50 89l7-10-7 17-7-17Z"/>
       <path fill="none" stroke="currentColor" stroke-width="2" d="M19 30 29 38 41 42m40-12-10 8-12 4"/>
     </symbol>
+    <symbol id="i-profile" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 20v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2Z"/></symbol>
     <symbol id="i-travel" viewBox="0 0 24 24"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
     <symbol id="i-home" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
     <symbol id="i-meetings" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h2m4 0h2"/></symbol>
@@ -291,6 +293,7 @@ dialog::backdrop { background: #101c27ad; }
 'use strict';
 
 const SECTIONS = {
+  profile: { label: 'ข้อมูลผู้บัญชาการสูงสุด', english: 'SUPREME COMMANDER PROFILE', description: 'ข้อมูลประจำตัว ตำแหน่ง และหน้าที่รับผิดชอบ' },
   home: { label: 'ภาพรวมทั้งหมด', english: 'COMMAND OVERVIEW' },
   meetings: { label: 'รายการประชุม', english: 'MEETINGS', description: 'วัน เวลา หัวข้อ สถานที่และรูปแบบการประชุม' },
   command: { label: 'รายการภารกิจผู้บัญชาการ', english: 'COMMANDER MISSIONS', description: 'ติดตามภารกิจและรายชื่อผู้ร่วมปฏิบัติ' },
@@ -298,6 +301,7 @@ const SECTIONS = {
   field77: { label: 'รายการภารกิจ 77', english: 'PROVINCIAL MISSIONS', description: 'ติดตามภารกิจรายภาค จังหวัด อำเภอและเขต' },
 };
 const ENTRY_FIELDS = {
+  profile: [['title', 'หัวข้อข้อมูล'], ['details', 'รายละเอียด']],
   meetings: [['date', 'วันที่ประชุม'], ['time', 'เวลา'], ['title', 'หัวข้อประชุม'], ['location', 'สถานที่หรือลิงก์'], ['method', 'รูปแบบการประชุม'], ['status', 'สถานะ'], ['details', 'ระเบียบวาระและรายละเอียด']],
   command: [['date', 'วันที่ปฏิบัติภารกิจ'], ['title', 'ชื่อภารกิจ'], ['location', 'สถานที่'], ['commanders', 'ผู้บัญชาการ'], ['participants', 'ผู้ร่วมภารกิจ'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
   travel: [['date', 'วันที่เดินทาง'], ['time', 'เวลา'], ['title', 'หัวข้อการเดินทาง'], ['origin', 'ต้นทาง'], ['location', 'ปลายทาง'], ['currentLocation', 'จุดที่อยู่ล่าสุด'], ['method', 'วิธีเดินทาง'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
@@ -595,6 +599,7 @@ function todayEntries(key) {
 
 function renderOverview(target) {
   const counts = data ? {
+    profile: SECTIONS.profile.description,
     meetings: todayEntries('meetings').length + ' นัดวันนี้',
     command: data.command.filter(isActive).length + ' ภารกิจที่ยังเปิด',
     travel: todayEntries('travel').length + ' รายการวันนี้',
@@ -603,7 +608,7 @@ function renderOverview(target) {
   const grid = element('div', 'portal-grid');
   Object.entries(ENTRY_FIELDS).forEach(([key]) => {
     const section = SECTIONS[key];
-    const card = button('portal-card' + (key === 'meetings' ? ' featured' : ''), undefined, () => navigate(key));
+    const card = button('portal-card' + (key === 'profile' ? ' featured' : ''), undefined, () => navigate(key));
     const badge = element('span', 'portal-icon');
     badge.append(icon(key));
     card.append(badge, element('span', 'portal-meta', 'เปิดเมนู →'),
@@ -642,6 +647,12 @@ function renderOverview(target) {
 
 function renderSection(target, key) {
   const panel = element('section', 'panel');
+  if (key === 'profile') {
+    panel.append(element('div', 'list-head', data.profile.length + ' หัวข้อข้อมูล'));
+    appendEntries(panel, key, data.profile, 'ยังไม่มีข้อมูลผู้บัญชาการสูงสุด');
+    target.append(panel);
+    return;
+  }
   const filters = [
     ['all', 'ทั้งหมด', () => true],
     ...(key === 'command' ? [['active', 'ยังเปิดอยู่', isActive]] : [
@@ -669,6 +680,14 @@ function renderSection(target, key) {
 function appendEntries(panel, key, entries, emptyText) {
   if (!entries.length) panel.append(element('p', 'empty', emptyText));
   entries.forEach(entry => {
+    if (key === 'profile') {
+      const row = button('item profile-item', undefined, () => showDetail(key, entry));
+      const summary = element('span');
+      summary.append(element('strong', '', entry.title), element('span', 'caption', entry.details || 'ยังไม่ได้ระบุ'));
+      row.append(summary);
+      panel.append(row);
+      return;
+    }
     const row = button('item', undefined, () => showDetail(key, entry));
     const when = element('span');
     if (entry.time) when.append(element('span', 'item-time', entry.time));
@@ -919,12 +938,18 @@ function showDetail(key, entry) {
     body.append(element('h3', '', label), element('p', 'detail', entry.details));
   }
   appendRelated(body, entry);
-  if (key === 'command' && entry.id && !isLoading) {
-    body.append(button('secondary-action', 'แก้ไขรายชื่อ', () => {
+  body.append(button('secondary-action', 'แก้ไขข้อมูล', () => {
+    if (isLoading) return;
+    const current = data[key].find(item => entry.id ? item.id === entry.id : item === entry);
+    if (!current) {
       byId('dialog').close();
-      openEntryForm(entry);
-    }));
-  }
+      notice('ไม่พบรายการเดิม กรุณากดอัปเดต', true);
+      return;
+    }
+    byId('dialog').close();
+    if (byId('summaryDialog').open) byId('summaryDialog').close();
+    openEntryForm(key, current);
+  }));
   if (!byId('dialog').open) byId('dialog').showModal();
 }
 
@@ -984,73 +1009,94 @@ function namesControl(field, label, value) {
   return group;
 }
 
-function openEntryForm(existing = null) {
-  const key = existing ? 'command' : currentSection;
+function openEntryForm(key = currentSection, existing = null) {
   if (isLoading || !data || !ENTRY_FIELDS[key]) return;
-  if (key === 'field77' && !areaView.province) return;
-  if (existing) {
-    entryRequest = { section: key, id: existing.id, previous: {
-      commanders: existing.commanders || '', participants: existing.participants || '',
-    } };
-  } else {
-    const id = Array.from(crypto.getRandomValues(new Uint8Array(16)),
-      byte => byte.toString(16).padStart(2, '0')).join('');
-    entryRequest = { section: key, id };
-    if (key === 'field77') {
-      entryRequest.area = { province: areaView.province, district: areaView.district };
-    }
-  }
-  byId('entryTitle').textContent = existing ? 'แก้ไขรายชื่อ · ' + existing.title : 'เพิ่มข้อมูล · ' + SECTIONS[key].label;
+  if (key === 'field77' && !existing && !areaView.province) return;
+  entryRequest = existing ? { section: key, id: existing.id, row: existing.row, previous: { ...existing } }
+    : { section: key, id: Array.from(crypto.getRandomValues(new Uint8Array(16)),
+      byte => byte.toString(16).padStart(2, '0')).join('') };
+  byId('entryTitle').textContent = existing ? 'แก้ไขข้อมูล · ' + existing.title : 'เพิ่มข้อมูล · ' + SECTIONS[key].label;
   const fields = byId('entryFields');
   fields.replaceChildren();
-  if (entryRequest.area) {
-    const { province, district } = entryRequest.area;
-    fields.append(element('p', 'area-form-note', AREAS[province].name + ' · ' +
-      (district ? districtLabel(province, district) : 'ระดับจังหวัด')));
-  }
+  if (key === 'field77') appendAreaFields(fields, existing || areaView);
   for (const [field, title] of ENTRY_FIELDS[key]) {
     if (NAME_FIELDS.includes(field)) {
       fields.append(namesControl(field, title, existing?.[field]));
       continue;
     }
-    if (existing) continue;
     const label = element('label', '', title);
     const choices = field === 'status' ? STATUS_OPTIONS[key] : null;
     const control = element(choices ? 'select' : field === 'details' ? 'textarea' : 'input');
+    const value = existing?.[field] ?? (field === 'date' ? data.today : '');
     control.name = field;
     if (choices) {
       control.append(new Option('ไม่ระบุ', ''));
       choices.forEach(choice => control.append(new Option(choice, choice)));
+      if (value && !choices.includes(value)) control.append(new Option(value, value));
     } else if (field === 'date' || field === 'time') {
-      control.type = field;
-      if (field === 'date') control.value = data.today;
+      const isNativeValue = field === 'date' ? isDate(value) : /^\d{2}:\d{2}$/.test(value);
+      control.type = !value || isNativeValue ? field : 'text';
     } else {
       control.maxLength = field === 'details' ? 8000 : 300;
     }
-    control.required = field === 'title' || (field === 'date' && key !== 'field77') ||
-      (key === 'travel' && (field === 'location' || field === 'method'));
+    control.value = value;
+    control.required = field === 'title' || ((!existing || value) &&
+      ((field === 'date' && key !== 'field77') || (key === 'travel' && (field === 'location' || field === 'method'))));
     label.append(control);
     fields.append(label);
   }
 
   const links = byId('entryRelated');
-  byId('entryRelatedLabel').hidden = Boolean(existing);
   links.replaceChildren(new Option('ไม่เชื่อมโยง', ''));
-  if (!existing) {
-    for (const otherKey of Object.keys(ENTRY_FIELDS)) {
-      if (otherKey === key) continue;
-      const group = element('optgroup');
-      group.label = SECTIONS[otherKey].label;
-      data[otherKey].filter(entry => entry.id).forEach(entry => {
-        const date = entry.date ? ' · ' + formatDate(entry.date, true) : '';
-        group.append(new Option(entry.title + date, entry.id));
-      });
-      if (group.childElementCount) links.append(group);
-    }
+  for (const otherKey of Object.keys(ENTRY_FIELDS)) {
+    if (otherKey === key) continue;
+    const group = element('optgroup');
+    group.label = SECTIONS[otherKey].label;
+    data[otherKey].filter(entry => entry.id).forEach(entry => {
+      const date = entry.date ? ' · ' + formatDate(entry.date, true) : '';
+      group.append(new Option(entry.title + date, entry.id));
+    });
+    if (group.childElementCount) links.append(group);
   }
+  if (existing?.relatedId && !Array.from(links.options).some(option => option.value === existing.relatedId)) {
+    links.append(new Option('การเชื่อมโยงเดิม', existing.relatedId));
+  }
+  links.value = existing?.relatedId || '';
   byId('entryError').hidden = true;
   byId('entryDialog').showModal();
   fields.querySelector('[name="title"], [name="commanders"]')?.focus();
+}
+
+function appendAreaFields(target, area) {
+  const provinceLabel = element('label', '', 'จังหวัด');
+  const province = element('select');
+  province.name = 'province';
+  province.required = true;
+  province.append(new Option('เลือกจังหวัด', ''));
+  REGIONS.forEach(([name, codes]) => {
+    const group = element('optgroup');
+    group.label = name;
+    codes.forEach(code => group.append(new Option(AREAS[code].name, code)));
+    province.append(group);
+  });
+  if (area.province && !AREAS[area.province]) province.append(new Option(area.province, area.province));
+  province.value = area.province;
+
+  const districtLabel = element('label', '', 'อำเภอหรือเขต');
+  const district = element('select');
+  district.name = 'district';
+  function fillDistricts(selected) {
+    const options = AREAS[province.value]?.districts || {};
+    district.replaceChildren(new Option('ระดับจังหวัด', ''));
+    Object.entries(options).forEach(([code, name]) => district.append(new Option(name, code)));
+    if (selected && !options[selected]) district.append(new Option(selected, selected));
+    district.value = selected;
+  }
+  fillDistricts(area.district || '');
+  province.addEventListener('change', () => fillDistricts(''));
+  provinceLabel.append(province);
+  districtLabel.append(district);
+  target.append(provinceLabel, districtLabel);
 }
 
 function setSaving(saving) {
@@ -1067,8 +1113,8 @@ function submitEntry(event) {
   const fields = Object.fromEntries(form);
   const relatedId = fields.relatedId;
   delete fields.relatedId;
-  const { section, id, area, previous } = entryRequest;
-  if (!previous && !fields.title.trim()) {
+  const { section, id, row, previous } = entryRequest;
+  if (!fields.title.trim()) {
     entryError('กรุณากรอกหัวข้อ');
     return;
   }
@@ -1080,16 +1126,15 @@ function submitEntry(event) {
         return;
       }
     }
-    if (!fields.commanders) {
+    if (!fields.commanders && (!previous || previous.commanders)) {
       entryError('กรุณาระบุชื่อผู้บัญชาการอย่างน้อยหนึ่งคน');
       return;
     }
   }
-  Object.assign(fields, area);
   byId('entryError').hidden = true;
   setSaving(true);
   if (!isAppsScript) {
-    if (previous) Object.assign(data.command.find(entry => entry.id === id), fields);
+    if (previous) Object.assign(data[section].find(entry => entry.id === id), fields, { relatedId });
     else data[section].push({ ...fields, id, relatedId });
     data.updatedAt = BANGKOK_TIME.format(new Date());
     finishEntry(data);
@@ -1099,7 +1144,7 @@ function submitEntry(event) {
     setSaving(false);
     entryError(rpcErrorText(error));
   });
-  if (previous) rpc.updatePhoenixCommandNames({ id, fields, previous });
+  if (previous) rpc.updatePhoenixEntry({ section, id, row, fields, previous, relatedId });
   else rpc.addPhoenixEntry({ section, id, fields, relatedId });
 }
 
@@ -1114,8 +1159,17 @@ function finishEntry(result) {
   setSaving(false);
   byId('entryDialog').close();
   if (!entryRequest?.previous && currentSection === entryRequest?.section) currentFilter = 'all';
+  const previous = entryRequest?.previous;
+  if (currentSection === 'field77' && entryRequest?.section === 'field77' && previous?.id &&
+      previous.province === areaView.province && previous.district === areaView.district) {
+    const saved = data.field77.find(entry => entry.id === previous.id);
+    if (saved && (saved.province !== previous.province || saved.district !== previous.district)) {
+      const region = REGIONS.findIndex(([, codes]) => codes.includes(saved.province));
+      if (region >= 0) areaView = { region, province: saved.province, district: saved.district };
+    }
+  }
   render();
-  notice(isAppsScript ? 'บันทึกข้อมูลลง Google Sheets แล้ว' : 'เพิ่มข้อมูลตัวอย่างแล้ว ข้อมูลจะหายเมื่อปิดหรือโหลดหน้านี้ใหม่');
+  notice(isAppsScript ? 'บันทึกข้อมูลลง Google Sheets แล้ว' : 'บันทึกข้อมูลตัวอย่างแล้ว ข้อมูลจะหายเมื่อปิดหรือโหลดหน้านี้ใหม่');
   byId('notice').classList.add('success');
 }
 
@@ -1123,6 +1177,11 @@ function sampleData(now) {
   const today = dateKey(now);
   return {
     today, updatedAt: BANGKOK_TIME.format(now),
+    profile: [
+      { title: 'ชื่อ–นามสกุล', details: '' },
+      { title: 'ตำแหน่ง', details: 'ผู้บัญชาการสูงสุด' },
+      { title: 'สังกัด', details: 'สถาบันฟินิกซ์' },
+    ],
     meetings: [
       { date: today, time: '09:00', title: 'ประชุมติดตามภารกิจประจำวัน', location: 'ห้องประชุม PHX-02', method: 'ประชุมในห้อง', status: 'นัดหมายแล้ว', details: 'ทบทวนกำหนดการและเรื่องที่ต้องประสานในวันนี้' },
     ],
