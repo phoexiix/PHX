@@ -172,6 +172,15 @@ dialog::backdrop { background: #101c27ad; }
 .entry-form input, .entry-form textarea, .entry-form select { width: 100%; border: 1px solid #c8c7c0; border-radius: 6px; background: white; color: var(--ink); padding: 8px 10px; font: inherit; font-weight: 400; }
 .entry-form textarea { min-height: 92px; resize: vertical; }
 #entryFields { display: grid; gap: 10px; }
+.calendar-province-picker { min-width: 0; margin: 0; padding: 10px; border: 1px solid #c8c7c0; border-radius: 6px; display: grid; gap: 8px; }
+.calendar-province-picker legend { padding: 0 4px; font-weight: 700; }
+.calendar-province-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: 200px; overflow-y: auto; }
+.entry-form .calendar-province-option { display: flex; align-items: center; gap: 7px; padding: 6px; font-weight: 400; border-radius: 4px; }
+.calendar-province-option:has(input:checked) { background: #fef9c3; }
+.entry-form .calendar-province-option input { width: 17px; height: 17px; margin: 0; padding: 0; flex-shrink: 0; }
+.calendar-province-selected { display: flex; gap: 5px; flex-wrap: wrap; }
+.calendar-province-selected button { font: inherit; font-size: 12px; border: 1px solid #d6c86f; border-radius: 5px; padding: 3px 7px; background: #fef9c3; color: #422006; }
+@media (max-width: 430px) { .calendar-province-options { grid-template-columns: minmax(0, 1fr); } }
 .entry-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
 .entry-form .notice { margin: 0; }
 .secondary-action.delete-action { color: #8b1425; border-color: #cb9ba3; }
@@ -1720,8 +1729,17 @@ const DEPLOYMENT_MAP_PATHS = {
   "96": "M169.5,535 164.6,535.5 158.4,540.9 156.4,549 160.4,555.2 161.3,561.1 164.2,559.4 168.2,566.2 172.9,567.1 177.6,561.8 177.5,558 181.7,553.9 183,547.6 172.9,539.7Z",
 };
 
+function calendarProvinces(entry) {
+  return [...new Set((entry?.province || '').split(',').map(code => code.trim()).filter(Boolean))];
+}
+
+function calendarProvinceNames(entry) {
+  return calendarProvinces(entry).map(code => AREAS[code]?.name || code).join(', ');
+}
+
 function deploymentMapResult(province) {
-  return data?.calendar?.some(entry => entry.category === CALENDAR_DEPLOYMENT_TYPE && entry.province === province)
+  if (areaResult(province) === 'ผ่าน') return 'ผ่าน';
+  return data?.calendar?.some(entry => entry.category === CALENDAR_DEPLOYMENT_TYPE && calendarProvinces(entry).includes(province))
     ? 'มีภารกิจวางกำลัง' : areaResult(province);
 }
 
@@ -2332,7 +2350,7 @@ function appendEntries(panel, key, entries, emptyText) {
     const date = key === 'calendar' ? selectedCalendarDate : entry.date;
     when.append(element('span', entry.time ? 'item-date' : 'item-time', formatDate(date, true)));
     const summary = element('span');
-    const subtitle = key === 'calendar' ? [AREAS[entry.province]?.name, entry.location].filter(Boolean).join(' · ') :
+    const subtitle = key === 'calendar' ? [calendarProvinceNames(entry), entry.location].filter(Boolean).join(' · ') :
       [AREAS[entry.province]?.name, entry.district ? districtLabel(entry.province, entry.district) : 'ระดับจังหวัด']
         .filter(Boolean).join(' · ');
     summary.append(element('strong', '', entryDisplayTitle(key, entry)));
@@ -2706,7 +2724,7 @@ function showDetail(key, entry) {
     if (field === 'title' || field === 'details' || !entry[field]) continue;
     const value = field === 'date' || field === 'endDate' ? formatDate(entry[field])
       : field === 'category' ? calendarTypeLabel(entry[field])
-      : field === 'province' ? AREAS[entry[field]]?.name || entry[field] : entry[field];
+      : field === 'province' && key === 'calendar' ? calendarProvinceNames(entry) : entry[field];
     const content = element('dd', '', value);
     list.append(element('dt', '', field === 'endDate' ? 'วันสิ้นสุด' : label), content);
   }
@@ -2801,6 +2819,69 @@ function rpcErrorText(error) {
     : message;
 }
 
+function createCalendarProvincePicker(existing) {
+  const picker = element('fieldset', 'calendar-province-picker');
+  picker.append(element('legend', '', 'จังหวัด (เลือกได้หลายจังหวัด)'));
+  const label = element('label', '', 'ค้นหาจังหวัด');
+  const search = element('input');
+  search.type = 'search';
+  search.placeholder = 'พิมพ์ชื่อจังหวัด';
+  search.autocomplete = 'off';
+  search.maxLength = 100;
+  search.addEventListener('keydown', event => {
+    if (event.key === 'Enter') event.preventDefault();
+  });
+  label.append(search);
+  const count = element('span', 'caption');
+  count.setAttribute('aria-live', 'polite');
+  const selected = element('div', 'calendar-province-selected');
+  const options = element('div', 'calendar-province-options');
+  const empty = element('span', 'caption', 'ไม่พบจังหวัดที่ค้นหา');
+  empty.hidden = true;
+  const initial = new Set(calendarProvinces(existing));
+  const controls = new Map();
+  const updateSelected = () => {
+    selected.replaceChildren();
+    let total = 0;
+    for (const [code, check] of controls) {
+      if (!check.checked) continue;
+      total++;
+      const remove = button('', AREAS[code].name + ' ×', () => {
+        check.checked = false;
+        updateSelected();
+      });
+      remove.setAttribute('aria-label', 'ยกเลิกเลือกจังหวัด' + AREAS[code].name);
+      selected.append(remove);
+    }
+    count.textContent = 'เลือกแล้ว ' + total + ' จังหวัด';
+  };
+  for (const code of Object.keys(AREAS).sort((a, b) => AREAS[a].name.localeCompare(AREAS[b].name, 'th'))) {
+    const row = element('label', 'calendar-province-option');
+    const check = element('input');
+    check.type = 'checkbox';
+    check.name = 'province';
+    check.value = code;
+    check.checked = initial.has(code);
+    check.addEventListener('change', updateSelected);
+    controls.set(code, check);
+    row.append(check, element('span', '', AREAS[code].name));
+    options.append(row);
+  }
+  search.addEventListener('input', () => {
+    const query = search.value.trim().replace(/^จังหวัด\s*/, '');
+    let visible = 0;
+    for (const [code, check] of controls) {
+      const match = AREAS[code].name.includes(query);
+      check.parentElement.hidden = !match;
+      if (match) visible++;
+    }
+    empty.hidden = visible > 0;
+  });
+  updateSelected();
+  picker.append(label, count, selected, options, empty);
+  return picker;
+}
+
 function openEntryForm(key = currentSection, existing = null, officePosition = '') {
   if (isLoading || !data || !ENTRY_FIELDS[key]) return;
   if (key === 'field77' && !existing) return;
@@ -2814,10 +2895,13 @@ function openEntryForm(key = currentSection, existing = null, officePosition = '
   fields.replaceChildren();
   if (key === 'field77') appendAreaFields(fields, existing);
   for (const [field, title] of formFields) {
+    if (isCalendar && field === 'province') {
+      fields.append(createCalendarProvincePicker(existing));
+      continue;
+    }
     const label = element('label', '', title);
     const choices = field === 'officePosition' ? Object.keys(OFFICE_POSITIONS)
       : field === 'category' ? Object.keys(CALENDAR_TYPES)
-      : isCalendar && field === 'province' ? Object.keys(AREAS).sort((a, b) => AREAS[a].name.localeCompare(AREAS[b].name, 'th'))
       : field === 'status' ? STATUS_OPTIONS[key] : null;
     const control = element(choices ? 'select' : field === 'details' ? 'textarea' : 'input');
     const value = existing?.[field] ?? (field === 'officePosition' ? officePosition
@@ -2825,13 +2909,13 @@ function openEntryForm(key = currentSection, existing = null, officePosition = '
     control.name = field;
     if (choices) {
       control.append(new Option(field === 'officePosition' ? 'เลือกตำแหน่ง'
-        : field === 'category' ? 'เลือกประเภทตารางงาน' : field === 'province' ? 'เลือกจังหวัด' : 'ไม่ระบุ', ''));
+        : field === 'category' ? 'เลือกประเภทตารางงาน' : 'ไม่ระบุ', ''));
       choices.forEach(choice => {
         const occupied = field === 'officePosition' && choice !== 'staff' && choice !== value &&
           data.profile.some(entry => entry.officePosition === choice);
         if (occupied) return;
         const label = field === 'officePosition' ? OFFICE_POSITIONS[choice]
-          : field === 'category' ? calendarTypeLabel(choice) : field === 'province' ? AREAS[choice].name : choice;
+          : field === 'category' ? calendarTypeLabel(choice) : choice;
         control.append(new Option(label, choice));
       });
       if (value && !choices.includes(value)) control.append(new Option(value, value));
@@ -2852,12 +2936,11 @@ function openEntryForm(key = currentSection, existing = null, officePosition = '
     const start = fields.querySelector('[name="date"]');
     const end = fields.querySelector('[name="endDate"]');
     const category = fields.querySelector('[name="category"]');
-    const province = fields.querySelector('[name="province"]');
+    const province = fields.querySelector('.calendar-province-picker');
     const syncProvince = () => {
       const deployment = category.value === CALENDAR_DEPLOYMENT_TYPE;
-      province.parentElement.hidden = !deployment;
+      province.hidden = !deployment;
       province.disabled = !deployment;
-      province.required = deployment;
     };
     category.addEventListener('change', syncProvince);
     syncProvince();
@@ -2938,13 +3021,15 @@ function submitEntry(event) {
   const relatedId = section === 'calendar' ? previous?.relatedId || '' : fields.relatedId;
   delete fields.relatedId;
   if (section === 'calendar') {
-    if (!isPreview && !data.calendarProvinceEnabled) {
+    if (!isPreview && !data.calendarMultiProvinceEnabled) {
       entryError('กรุณาเผยแพร่ Code.gs เวอร์ชันใหม่ใน Apps Script แล้วอัปเดตหน้าเว็บ');
       return;
     }
-    fields.province = fields.category === CALENDAR_DEPLOYMENT_TYPE ? fields.province || '' : '';
-    if (fields.category === CALENDAR_DEPLOYMENT_TYPE && !Object.hasOwn(AREAS, fields.province)) {
-      entryError('กรุณาเลือกจังหวัด');
+    const provinces = [...new Set(form.getAll('province'))].sort();
+    fields.province = fields.category === CALENDAR_DEPLOYMENT_TYPE ? provinces.join(',') : '';
+    if (fields.category === CALENDAR_DEPLOYMENT_TYPE &&
+        (!provinces.length || provinces.some(code => !Object.hasOwn(AREAS, code)))) {
+      entryError('กรุณาเลือกจังหวัดอย่างน้อย 1 จังหวัด');
       return;
     }
     const sameCategory = fields.category === previous?.category;
