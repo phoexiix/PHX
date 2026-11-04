@@ -216,6 +216,7 @@ dialog::backdrop { background: #101c27ad; }
 .deployment-province { fill: #cbd5e1; stroke: #fff; stroke-width: .8; vector-effect: non-scaling-stroke; cursor: pointer; }
 .deployment-province.area-result-pass { fill: #348259; }
 .deployment-province.area-result-fail { fill: #bd414c; }
+.deployment-province.area-result-planned { fill: #facc15; }
 .deployment-province:hover, .deployment-province.selected { stroke: #142431; stroke-width: 1.8; }
 .deployment-map-side { display: grid; gap: 10px; justify-items: start; }
 .deployment-map-side label { display: grid; gap: 6px; width: 100%; }
@@ -227,6 +228,7 @@ dialog::backdrop { background: #101c27ad; }
 }
 .deployment-map-legend .area-result-pass::before { background: #348259; }
 .deployment-map-legend .area-result-fail::before { background: #bd414c; }
+.deployment-map-legend .area-result-planned::before { background: #facc15; }
 .deployment-map-source { padding: 0 16px 12px; }
 @media (max-width: 600px) {
   .deployment-map-body { grid-template-columns: minmax(0, 1fr); }
@@ -310,6 +312,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .calendar-tag.duty-front { background: #99f6e4; color: #134e4a; }
 .calendar-tag.duty-command { background: #1e3a8a; color: #ffffff; }
 .calendar-tag.duty-tactical { background: #fde047; color: #422006; }
+.calendar-tag.deployment-mission { background: #facc15; color: #422006; }
 .calendar-tag.high-council { background: #8b1425; color: #ffffff; }
 .calendar-tag.foreign-mission { background: #fbcfe8; color: #831843; }
 .calendar-tag.domestic { background: #fb923c; color: #431407; }
@@ -529,7 +532,7 @@ const SECTIONS = {
 };
 const ENTRY_FIELDS = {
   profile: [['title', 'หัวข้อข้อมูล'], ['details', 'รายละเอียด']],
-  calendar: [['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'], ['time', 'เวลา'], ['title', 'หัวข้อตารางงาน'], ['category', 'ประเภทตารางงาน'], ['location', 'สถานที่'], ['details', 'รายละเอียด']],
+  calendar: [['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'], ['time', 'เวลา'], ['title', 'หัวข้อตารางงาน'], ['category', 'ประเภทตารางงาน'], ['province', 'จังหวัด'], ['location', 'สถานที่'], ['details', 'รายละเอียด']],
   field77: [['date', 'วันที่เดินทาง'], ['title', 'หัวข้อการเดินทาง'], ['status', 'สถานะ'], ['details', 'รายละเอียด']],
 };
 const OFFICE_POSITIONS = {
@@ -551,11 +554,12 @@ const OFFICE_FORM_FIELDS = [
 ];
 const CALENDAR_FORM_FIELDS = [
   ['date', 'วันเริ่มต้น'], ['endDate', 'วันสิ้นสุด (เว้นว่างได้ถ้าวันเดียว)'],
-  ['category', 'ประเภทตารางงาน'], ['details', 'รายละเอียด (ไม่บังคับ)'],
+  ['category', 'ประเภทตารางงาน'], ['province', 'จังหวัด'], ['details', 'รายละเอียด (ไม่บังคับ)'],
 ];
 const STATUS_OPTIONS = {
   field77: ['ยังไม่เริ่ม', 'กำลังดำเนินการ', 'เสร็จสิ้น', 'ยกเลิก'],
 };
+const CALENDAR_DEPLOYMENT_TYPE = 'ภารกิจวางกำลัง';
 const CALENDAR_BASE_TYPE = 'ประจำการฟินิกซ์';
 const CALENDAR_BASE_LABEL = 'ประจำการบัญชาการสูงสุด';
 const CALENDAR_TYPES = {
@@ -568,6 +572,7 @@ const CALENDAR_TYPES = {
   'เดินทางต่างประเทศ': 'international',
   'ภารกิจต่างประเทศ': 'foreign-mission',
   'สภาสูงสุดฟินิกซ์': 'high-council',
+  [CALENDAR_DEPLOYMENT_TYPE]: 'deployment-mission',
   'งดปฏิบัติหน้าที่': 'off-duty',
 };
 const MONTH_FORMAT = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -1715,6 +1720,11 @@ const DEPLOYMENT_MAP_PATHS = {
   "96": "M169.5,535 164.6,535.5 158.4,540.9 156.4,549 160.4,555.2 161.3,561.1 164.2,559.4 168.2,566.2 172.9,567.1 177.6,561.8 177.5,558 181.7,553.9 183,547.6 172.9,539.7Z",
 };
 
+function deploymentMapResult(province) {
+  return data?.calendar?.some(entry => entry.category === CALENDAR_DEPLOYMENT_TYPE && entry.province === province)
+    ? 'มีภารกิจวางกำลัง' : areaResult(province);
+}
+
 function renderDeploymentMap() {
   const panel = element('section', 'panel deployment-map');
   const heading = element('h3', '', 'แผนที่ผลประเมินภารกิจวางกำลังฟินิกซ์');
@@ -1734,7 +1744,7 @@ function renderDeploymentMap() {
 
   const side = element('div', 'deployment-map-side');
   const legend = element('div', 'deployment-map-legend');
-  for (const result of ['ผ่าน', 'ไม่ผ่าน', 'รอดำเนินการ']) {
+  for (const result of ['มีภารกิจวางกำลัง', 'ผ่าน', 'ไม่ผ่าน', 'รอดำเนินการ']) {
     legend.append(element('span', areaResultClass(result), result));
   }
   const label = element('label', '', 'จังหวัด');
@@ -1757,14 +1767,15 @@ function renderDeploymentMap() {
     selectedCode = code;
     province.value = code;
     paths.get(code)?.classList.add('selected');
-    const result = code ? areaResult(code) : '';
+    const result = code ? deploymentMapResult(code) : '';
     status.className = areaResultClass(result);
-    status.textContent = code ? AREAS[code].name + ' · ' + result : 'เลือกจังหวัดเพื่อดูผลประเมิน';
+    status.textContent = code ? AREAS[code].name + ' · ' + result +
+      (result === 'มีภารกิจวางกำลัง' ? ' · ผลประเมิน: ' + areaResult(code) : '') : 'เลือกจังหวัดเพื่อดูผลประเมิน';
     open.disabled = !code;
   }
 
   for (const [code, pathData] of Object.entries(DEPLOYMENT_MAP_PATHS)) {
-    const result = areaResult(code);
+    const result = deploymentMapResult(code);
     const path = document.createElementNS(ns, 'path');
     const title = document.createElementNS(ns, 'title');
     title.textContent = AREAS[code].name + ' · ' + result;
@@ -1777,7 +1788,7 @@ function renderDeploymentMap() {
     map.append(path);
   }
   for (const code of Object.keys(AREAS).sort((a, b) => AREAS[a].name.localeCompare(AREAS[b].name, 'th'))) {
-    province.append(new Option(AREAS[code].name + ' · ' + areaResult(code), code));
+    province.append(new Option(AREAS[code].name + ' · ' + deploymentMapResult(code), code));
   }
   province.addEventListener('change', () => selectProvince(province.value));
 
@@ -1816,7 +1827,7 @@ function groupConsecutiveCalendarDays(entries) {
   const latestByItem = new Map();
   const ranges = [];
   for (const entry of daily) {
-    const key = JSON.stringify([entry.category, entryDisplayTitle('calendar', entry)]);
+    const key = JSON.stringify([entry.category, entryDisplayTitle('calendar', entry), entry.province || '']);
     const run = latestByItem.get(key);
     if (!run || Date.parse(entry.date) - Date.parse(run.endDate) > 86400000) {
       latestByItem.set(key, { ...entry, endDate: entry.date, dailyEntries: [entry] });
@@ -2321,7 +2332,7 @@ function appendEntries(panel, key, entries, emptyText) {
     const date = key === 'calendar' ? selectedCalendarDate : entry.date;
     when.append(element('span', entry.time ? 'item-date' : 'item-time', formatDate(date, true)));
     const summary = element('span');
-    const subtitle = key === 'calendar' ? entry.location :
+    const subtitle = key === 'calendar' ? [AREAS[entry.province]?.name, entry.location].filter(Boolean).join(' · ') :
       [AREAS[entry.province]?.name, entry.district ? districtLabel(entry.province, entry.district) : 'ระดับจังหวัด']
         .filter(Boolean).join(' · ');
     summary.append(element('strong', '', entryDisplayTitle(key, entry)));
@@ -2437,6 +2448,7 @@ function areaResult(province, district = '') {
 }
 
 function areaResultClass(result) {
+  if (result === 'มีภารกิจวางกำลัง') return 'area-result-planned';
   if (result === 'ผ่าน') return 'area-result-pass';
   if (result === 'ไม่ผ่าน') return 'area-result-fail';
   return '';
@@ -2693,7 +2705,8 @@ function showDetail(key, entry) {
   for (const [field, label] of ENTRY_FIELDS[key]) {
     if (field === 'title' || field === 'details' || !entry[field]) continue;
     const value = field === 'date' || field === 'endDate' ? formatDate(entry[field])
-      : field === 'category' ? calendarTypeLabel(entry[field]) : entry[field];
+      : field === 'category' ? calendarTypeLabel(entry[field])
+      : field === 'province' ? AREAS[entry[field]]?.name || entry[field] : entry[field];
     const content = element('dd', '', value);
     list.append(element('dt', '', field === 'endDate' ? 'วันสิ้นสุด' : label), content);
   }
@@ -2804,6 +2817,7 @@ function openEntryForm(key = currentSection, existing = null, officePosition = '
     const label = element('label', '', title);
     const choices = field === 'officePosition' ? Object.keys(OFFICE_POSITIONS)
       : field === 'category' ? Object.keys(CALENDAR_TYPES)
+      : isCalendar && field === 'province' ? Object.keys(AREAS).sort((a, b) => AREAS[a].name.localeCompare(AREAS[b].name, 'th'))
       : field === 'status' ? STATUS_OPTIONS[key] : null;
     const control = element(choices ? 'select' : field === 'details' ? 'textarea' : 'input');
     const value = existing?.[field] ?? (field === 'officePosition' ? officePosition
@@ -2811,13 +2825,13 @@ function openEntryForm(key = currentSection, existing = null, officePosition = '
     control.name = field;
     if (choices) {
       control.append(new Option(field === 'officePosition' ? 'เลือกตำแหน่ง'
-        : field === 'category' ? 'เลือกประเภทตารางงาน' : 'ไม่ระบุ', ''));
+        : field === 'category' ? 'เลือกประเภทตารางงาน' : field === 'province' ? 'เลือกจังหวัด' : 'ไม่ระบุ', ''));
       choices.forEach(choice => {
         const occupied = field === 'officePosition' && choice !== 'staff' && choice !== value &&
           data.profile.some(entry => entry.officePosition === choice);
         if (occupied) return;
         const label = field === 'officePosition' ? OFFICE_POSITIONS[choice]
-          : field === 'category' ? calendarTypeLabel(choice) : choice;
+          : field === 'category' ? calendarTypeLabel(choice) : field === 'province' ? AREAS[choice].name : choice;
         control.append(new Option(label, choice));
       });
       if (value && !choices.includes(value)) control.append(new Option(value, value));
@@ -2837,6 +2851,16 @@ function openEntryForm(key = currentSection, existing = null, officePosition = '
   if (isCalendar) {
     const start = fields.querySelector('[name="date"]');
     const end = fields.querySelector('[name="endDate"]');
+    const category = fields.querySelector('[name="category"]');
+    const province = fields.querySelector('[name="province"]');
+    const syncProvince = () => {
+      const deployment = category.value === CALENDAR_DEPLOYMENT_TYPE;
+      province.parentElement.hidden = !deployment;
+      province.disabled = !deployment;
+      province.required = deployment;
+    };
+    category.addEventListener('change', syncProvince);
+    syncProvince();
     const syncMinimum = () => { end.min = start.value; };
     start.addEventListener('input', syncMinimum);
     syncMinimum();
@@ -2914,6 +2938,15 @@ function submitEntry(event) {
   const relatedId = section === 'calendar' ? previous?.relatedId || '' : fields.relatedId;
   delete fields.relatedId;
   if (section === 'calendar') {
+    if (!isPreview && !data.calendarProvinceEnabled) {
+      entryError('กรุณาเผยแพร่ Code.gs เวอร์ชันใหม่ใน Apps Script แล้วอัปเดตหน้าเว็บ');
+      return;
+    }
+    fields.province = fields.category === CALENDAR_DEPLOYMENT_TYPE ? fields.province || '' : '';
+    if (fields.category === CALENDAR_DEPLOYMENT_TYPE && !Object.hasOwn(AREAS, fields.province)) {
+      entryError('กรุณาเลือกจังหวัด');
+      return;
+    }
     const sameCategory = fields.category === previous?.category;
     if (!fields.category || (!sameCategory && !Object.hasOwn(CALENDAR_TYPES, fields.category))) {
       entryError('กรุณาเลือกประเภทตารางงาน');
