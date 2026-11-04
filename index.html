@@ -2501,7 +2501,11 @@ function openAreaReport() {
       label.prepend(check);
       checklist.append(label);
     }
-    fields.append(checklist);
+    const selectAll = button('secondary-action', 'เลือกทั้งหมด', () => {
+      if (isSaving) return;
+      checklist.querySelectorAll('input[name="district"]').forEach(check => { check.checked = true; });
+    });
+    fields.append(selectAll, checklist);
   }
 
   modes.replaceChildren();
