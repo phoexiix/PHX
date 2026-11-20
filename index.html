@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>พื้นที่ส่วนตัวผู้บัญชาการสูงสุด | สถาบันฟินิกซ์</title>
+<title>ระบบติดตามงานของผู้บัญชาการสูงสุด | สถาบันฟินิกซ์</title>
 <link rel="icon" type="image/png" href="https://i.postimg.cc/0j6BgDMt/THE-CROW.png">
 <style>
 :root {
@@ -324,6 +324,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
 .calendar-tag.deployment-mission { background: #facc15; color: #422006; }
 .calendar-tag.high-council { background: #8b1425; color: #ffffff; }
 .calendar-tag.foreign-mission { background: #fbcfe8; color: #831843; }
+.calendar-tag.custom-calendar-type { background: #e2e8f0; color: #263238; }
 .calendar-tag.domestic { background: #fb923c; color: #431407; }
 .calendar-tag.international { background: #bae6fd; color: #0c4a6e; }
 .calendar-tag.off-duty { background: #e2e8f0; color: #334155; }
@@ -535,6 +536,7 @@ const SECTIONS = {
   home: { label: 'เมนูหลัก', english: 'COMMAND OVERVIEW' },
   profile: { label: 'ข้อมูลสำนัก', english: 'OFFICE DIRECTORY', description: 'โครงสร้างสำนักและข้อมูลบุคลากร' },
   calendar: { label: 'ตารางปฏิทิน', english: 'COMMAND CALENDAR', description: 'ดูตารางงานรายวันและเพิ่มรายการตามวันที่' },
+  calendarTypes: { label: 'จัดการประเภทงาน', english: 'CALENDAR TYPE MANAGEMENT', description: 'เพิ่ม ลบ และกำหนดสีประเภทตารางงาน' },
   field77: { label: 'ภารกิจวางกำลังฟินิกซ์', english: 'PHOENIX DEPLOYMENT MISSION', description: 'ดูภารกิจแยกตามภาค จังหวัด และอำเภอหรือเขต' },
   travel: { label: 'คำนวณการเดินทางในประเทศ', english: 'DOMESTIC TRAVEL ESTIMATOR', description: 'ประมาณเวลาบินและเวลาขับรถระหว่างจังหวัด' },
   secret: { label: 'เปิดซองลับ', english: 'SEALED REPORTS', description: 'รับรายงานลับจากเจ้าหน้าที่ประจำจังหวัดที่ผ่านการประเมิน' },
@@ -810,6 +812,7 @@ function element(tag, className, text) {
 }
 
 function icon(name) {
+  if (name === 'calendarTypes') name = 'calendar';
   const namespace = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(namespace, 'svg');
   svg.setAttribute('class', 'icon');
@@ -893,7 +896,7 @@ function refresh() {
   connection('loading', 'กำลังโหลดข้อมูล');
   notice('');
   phoenixRequest('getPhoenixDashboard').then(result => {
-    if (!result?.areaReports || !Object.keys(ENTRY_FIELDS).every(key => Array.isArray(result[key]))) {
+    if (!result?.areaReports || !result?.calendarTypes || !Object.keys(ENTRY_FIELDS).every(key => Array.isArray(result[key]))) {
       finishRefresh('error', 'โค้ดเว็บและ Apps Script คนละเวอร์ชัน');
       notice('กรุณาใช้ Code.gs และ index.html จากชุดเดียวกัน แล้วเผยแพร่เวอร์ชันใหม่', true);
       if (!data) render();
@@ -928,10 +931,11 @@ function render() {
   const isArea = currentSection === 'field77';
   const isTravel = currentSection === 'travel';
   const isSecret = currentSection === 'secret';
+  const isCalendarTypes = currentSection === 'calendarTypes';
   document.body.dataset.page = currentSection;
   byId('sidebar').hidden = isHome;
   byId('menuToggle').hidden = isHome;
-  byId('addEntry').hidden = isHome || isArea || isTravel || isSecret || !data;
+  byId('addEntry').hidden = isHome || isArea || isTravel || isSecret || isCalendarTypes || !data;
   byId('areaReport').hidden = !isArea || !data;
   byId('areaReport').disabled = isLoading;
   byId('areaSummary').hidden = !isArea || !areaView.province || !data;
@@ -944,6 +948,12 @@ function render() {
   }
   if (isSecret) {
     renderSecretReports(target);
+    return;
+  }
+  if (isCalendarTypes) {
+    target.replaceChildren();
+    if (data) renderCalendarTypeManager(target);
+    else target.append(element('p', 'empty', isLoading ? 'กำลังโหลดข้อมูล…' : 'ยังไม่มีข้อมูลให้แสดง'));
     return;
   }
   if (isTravel) {
@@ -1626,7 +1636,7 @@ function renderOverview(target) {
   const categories = new Set((data?.calendar || [])
     .filter(entry => isDate(entry.date) && entry.date <= today && calendarEndDate(entry) >= today)
     .map(entry => entry.category).filter(Boolean));
-  const statuses = [...categories].map(category => element('span', 'calendar-tag ' + calendarCategory(category), calendarTypeLabel(category)));
+  const statuses = [...categories].map(category => calendarTag(category, calendarTypeLabel(category)));
   schedule.replaceChildren(...(statuses.length ? statuses : [
     element('span', 'calendar-tag', data ? 'ไม่มีรายการในปฏิทิน' : isLoading ? 'กำลังโหลดสถานะ' : 'ยังไม่มีข้อมูลสถานะ'),
   ]));
@@ -1827,12 +1837,25 @@ function calendarTypeLabel(category) {
 }
 
 function entryDisplayTitle(key, entry) {
-  return key === 'calendar' && Object.hasOwn(CALENDAR_TYPES, entry.category)
+  return key === 'calendar' && Object.hasOwn(data?.calendarTypes || CALENDAR_TYPES, entry.category)
     ? calendarTypeLabel(entry.category) : entry.title;
 }
 
 function calendarCategory(category) {
-  return Object.hasOwn(CALENDAR_TYPES, category) ? CALENDAR_TYPES[category] : 'neutral';
+  return Object.hasOwn(CALENDAR_TYPES, category) ? CALENDAR_TYPES[category] : 'custom-calendar-type';
+}
+
+function applyCalendarTypeColor(node, category) {
+  const type = data?.calendarTypes?.[category];
+  if (type?.color) {
+    node.style.backgroundColor = type.color;
+    node.style.color = type.textColor || '#263238';
+  }
+  return node;
+}
+
+function calendarTag(category, text) {
+  return applyCalendarTypeColor(element('span', 'calendar-tag ' + calendarCategory(category), text), category);
 }
 
 function calendarEndDate(entry) {
@@ -1900,6 +1923,7 @@ function renderCalendarRanges(cells, dates, ranges) {
         const selectedInSegment = selectedCalendarDate >= dates[start] && selectedCalendarDate <= dates[end];
         selectCalendarDay(selectedInSegment ? selectedCalendarDate : dates[start]);
       });
+      applyCalendarTypeColor(bar, entry.category);
       bar.title = [category, title].filter(Boolean).join(' · ');
       bar.setAttribute('aria-label', [title, category, formatDate(entry.date), formatDate(endDate)]
         .filter(Boolean).join(' · '));
@@ -1944,8 +1968,8 @@ function renderCalendar(target) {
   head.append(previous, heading, next);
 
   const legend = element('div', 'calendar-legend');
-  Object.keys(CALENDAR_TYPES).forEach(category => {
-    legend.append(element('span', 'calendar-tag ' + calendarCategory(category), calendarTypeLabel(category)));
+  Object.keys(data.calendarTypes || CALENDAR_TYPES).forEach(category => {
+    legend.append(calendarTag(category, calendarTypeLabel(category)));
   });
 
   const calendar = element('table', 'calendar-grid');
@@ -1986,8 +2010,7 @@ function renderCalendar(target) {
         if (occupied.has(track)) continue;
         const entry = singleDayEntries[shown++];
         const title = entryDisplayTitle('calendar', entry);
-        const tag = element('span', 'calendar-tag ' + calendarCategory(entry.category),
-          [entry.time, title].filter(Boolean).join(' '));
+        const tag = calendarTag(entry.category, [entry.time, title].filter(Boolean).join(' '));
         tag.title = [calendarTypeLabel(entry.category), title].filter(Boolean).join(' · ');
         tag.style.setProperty('--status-row', track + 2);
         control.append(tag);
@@ -2083,6 +2106,84 @@ function renderOfficeGrid(grid, cards, rows, wireRow) {
     wireRow?.(row, config, index);
     return row;
   }));
+}
+
+
+function renderCalendarTypeManager(target) {
+  const panel = element('section', 'panel');
+  const head = element('div', 'panel-head');
+  head.append(element('strong', '', 'ประเภทตารางงาน'));
+  const form = element('form', 'entry-form');
+  form.style.padding = '16px';
+  const label = element('label', '', 'ชื่อประเภทงานใหม่');
+  const input = element('input');
+  input.name = 'typeName';
+  input.maxLength = 80;
+  input.placeholder = 'เช่น ประชุมภารกิจพิเศษ';
+  input.required = true;
+  label.append(input);
+  const error = element('p', 'notice error');
+  error.hidden = true;
+  error.setAttribute('role', 'alert');
+  const actions = element('div', 'entry-actions');
+  const save = element('button', 'primary-action', 'เพิ่มประเภทงาน');
+  save.type = 'submit';
+  actions.append(save);
+  form.append(label, error, actions);
+  const list = element('div');
+  const types = data.calendarTypes || Object.fromEntries(Object.keys(CALENDAR_TYPES).map(name => [name, {}]));
+  Object.entries(types).forEach(([name, config]) => {
+    const row = element('div', 'item');
+    row.style.gridTemplateColumns = 'minmax(0,1fr) auto';
+    const description = element('span');
+    const swatch = calendarTag(name, name);
+    swatch.style.marginBottom = '5px';
+    description.append(swatch, element('span', 'caption', config?.color ? 'สีที่ระบบกำหนดให้อัตโนมัติ' : 'ประเภทมาตรฐาน'));
+    const remove = button('secondary-action delete-action', 'ลบ', async () => {
+      if (isLoading || isSaving) return;
+      remove.disabled = true;
+      try {
+        await phoenixRequest('deletePhoenixCalendarType', { name });
+        await refreshAfterCalendarTypeChange('ลบประเภทงานเรียบร้อยแล้ว');
+      } catch (err) {
+        error.textContent = rpcErrorText(err);
+        error.hidden = false;
+        remove.disabled = false;
+      }
+    });
+    if (name === CALENDAR_DEPLOYMENT_TYPE) {
+      remove.disabled = true;
+      remove.title = 'ประเภทนี้เชื่อมกับระบบรายงานภารกิจวางกำลัง จึงไม่สามารถลบได้';
+    }
+    row.append(description, remove);
+    list.append(row);
+  });
+  if (!Object.keys(types).length) list.append(element('p', 'empty', 'ยังไม่มีประเภทงาน'));
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (isLoading || isSaving) return;
+    const name = input.value.trim();
+    if (!name) return;
+    save.disabled = true;
+    error.hidden = true;
+    try {
+      await phoenixRequest('addPhoenixCalendarType', { name });
+      await refreshAfterCalendarTypeChange('เพิ่มประเภทงานเรียบร้อยแล้ว ระบบกำหนดสีให้อัตโนมัติ');
+    } catch (err) {
+      error.textContent = rpcErrorText(err);
+      error.hidden = false;
+      save.disabled = false;
+    }
+  });
+  panel.append(head, form, list);
+  target.append(panel, element('p', 'caption', 'หมายเหตุ: ประเภทงานที่ถูกใช้ในรายการปฏิทินแล้วจะไม่สามารถลบได้ และประเภทภารกิจวางกำลังถูกสงวนไว้เพื่อคงการทำงานของระบบรายงานจังหวัด'));
+}
+
+async function refreshAfterCalendarTypeChange(message) {
+  const result = await phoenixRequest('getPhoenixDashboard');
+  data = result;
+  render();
+  notice(message);
 }
 
 function renderSection(target) {
@@ -2359,7 +2460,7 @@ function appendEntries(panel, key, entries, emptyText) {
       summary.append(element('span', 'caption detail', entry.details));
     }
     const badge = key === 'calendar' && entry.category
-      ? element('span', 'calendar-tag ' + calendarCategory(entry.category), calendarTypeLabel(entry.category))
+      ? calendarTag(entry.category, calendarTypeLabel(entry.category))
       : entry.status ? chip(entry.status) : element('span');
     row.append(when, summary, badge);
     if (key === 'calendar') {
@@ -2901,7 +3002,7 @@ function openEntryForm(key = currentSection, existing = null, officePosition = '
     }
     const label = element('label', '', title);
     const choices = field === 'officePosition' ? Object.keys(OFFICE_POSITIONS)
-      : field === 'category' ? Object.keys(CALENDAR_TYPES)
+      : field === 'category' ? Object.keys(data.calendarTypes || CALENDAR_TYPES)
       : field === 'status' ? STATUS_OPTIONS[key] : null;
     const control = element(choices ? 'select' : field === 'details' ? 'textarea' : 'input');
     const value = existing?.[field] ?? (field === 'officePosition' ? officePosition
@@ -3033,7 +3134,7 @@ function submitEntry(event) {
       return;
     }
     const sameCategory = fields.category === previous?.category;
-    if (!fields.category || (!sameCategory && !Object.hasOwn(CALENDAR_TYPES, fields.category))) {
+    if (!fields.category || (!sameCategory && !Object.hasOwn(data.calendarTypes || CALENDAR_TYPES, fields.category))) {
       entryError('กรุณาเลือกประเภทตารางงาน');
       return;
     }
