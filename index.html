@@ -98,6 +98,8 @@ h3 { font-size: 17px; margin: 4px 0 0; }
 .panel { background: white; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .panel-head { padding: 16px 17px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .item { display: grid; grid-template-columns: 67px minmax(0,1fr) auto; width: 100%; align-items: center; gap: 12px; padding: 13px 17px; min-height: 68px; background: white; border: 0; color: var(--ink); text-align: left; }
+.item.type-dragging { opacity: .45; }
+.item.type-drop-target { outline: 2px dashed var(--accent); outline-offset: -3px; background: #f8f6f0; }
 .item.profile-item { grid-template-columns: minmax(0, 1fr); }
 .profile-item .caption { white-space: pre-wrap; }
 .office-structure { overflow-x: auto; padding: 16px; }
@@ -1757,7 +1759,7 @@ function calendarProvinceNames(entry) {
 
 function deploymentMapResult(province) {
   if (areaResult(province) === 'ผ่าน') return 'ผ่าน';
-  return data?.calendar?.some(entry => entry.category === CALENDAR_DEPLOYMENT_TYPE && calendarProvinces(entry).includes(province))
+  return data?.calendar?.some(entry => entry.category === calendarDeploymentType() && calendarProvinces(entry).includes(province))
     ? 'มีภารกิจวางกำลัง' : areaResult(province);
 }
 
@@ -1838,6 +1840,11 @@ function renderDeploymentMap() {
   source.append(credit, document.createTextNode(' · '), license);
   panel.append(header, body, source);
   return panel;
+}
+
+function calendarDeploymentType() {
+  const types = data?.calendarTypes || {};
+  return Object.keys(types).find(name => types[name]?.systemKey === 'deployment') || CALENDAR_DEPLOYMENT_TYPE;
 }
 
 function calendarTypeLabel(category) {
@@ -2187,10 +2194,36 @@ function renderCalendarTypeManager(target) {
       try { await phoenixRequest('deletePhoenixCalendarType', { name }); await refreshAfterCalendarTypeChange('ลบประเภทงานเรียบร้อยแล้ว'); }
       catch (err) { error.textContent = rpcErrorText(err); error.hidden = false; remove.disabled = false; }
     });
-    if (name === CALENDAR_DEPLOYMENT_TYPE) {
+    if (name === calendarDeploymentType()) {
       remove.disabled = true; remove.title = 'ประเภทนี้เชื่อมกับระบบรายงานภารกิจวางกำลัง จึงไม่สามารถลบได้';
-      edit.disabled = true; edit.title = 'ประเภทระบบนี้ไม่สามารถเปลี่ยนชื่อได้';
     }
+    row.draggable = true;
+    row.dataset.typeName = name;
+    row.style.cursor = 'grab';
+    row.title = 'ลากเพื่อเปลี่ยนลำดับประเภทงาน';
+    row.addEventListener('dragstart', event => {
+      if (isLoading || isSaving) { event.preventDefault(); return; }
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', name);
+      row.classList.add('type-dragging');
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('type-dragging');
+      listWrap.querySelectorAll('.type-drop-target').forEach(node => node.classList.remove('type-drop-target'));
+    });
+    row.addEventListener('dragover', event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; row.classList.add('type-drop-target'); });
+    row.addEventListener('dragleave', () => row.classList.remove('type-drop-target'));
+    row.addEventListener('drop', async event => {
+      event.preventDefault(); row.classList.remove('type-drop-target');
+      const draggedName = event.dataTransfer.getData('text/plain');
+      if (!draggedName || draggedName === name || isLoading || isSaving) return;
+      const order = [...listWrap.querySelectorAll('[data-type-name]')].map(node => node.dataset.typeName);
+      const from = order.indexOf(draggedName), to = order.indexOf(name);
+      if (from < 0 || to < 0) return;
+      order.splice(from, 1); order.splice(to, 0, draggedName);
+      try { await phoenixRequest('reorderPhoenixCalendarTypes', { order }); await refreshAfterCalendarTypeChange('ปรับลำดับประเภทงานเรียบร้อยแล้ว'); }
+      catch (err) { notice(rpcErrorText(err)); }
+    });
     row.append(description, edit, remove); listWrap.append(row);
   });
   if (!Object.keys(types).length) listWrap.append(element('p', 'empty', 'ยังไม่มีประเภทงาน'));
@@ -2202,7 +2235,7 @@ function renderCalendarTypeManager(target) {
     catch (err) { error.textContent = rpcErrorText(err); error.hidden = false; save.disabled = false; }
   });
   panel.append(head, form, listWrap);
-  target.replaceChildren(panel, element('p', 'caption', 'หมายเหตุ: หากประเภทงานถูกใช้ในรายการปฏิทินแล้ว จะไม่สามารถลบได้ แต่สามารถเปลี่ยนชื่อได้ โดยรายการเดิมจะเปลี่ยนตามชื่อใหม่ด้วย ประเภท “ภารกิจวางกำลัง” เป็นประเภทระบบที่สงวนไว้'));
+  target.replaceChildren(panel, element('p', 'caption', 'วิธีใช้งาน: กด “แก้ไข” เพื่อเปลี่ยนชื่อประเภทงาน หรือจับแถวของประเภทงานแล้วลากขึ้นลงเพื่อจัดลำดับใหม่ สีประจำประเภทจะคงเดิมเมื่อเปลี่ยนชื่อ ส่วนประเภทที่มีรายการปฏิทินใช้งานอยู่จะยังลบไม่ได้ และประเภทภารกิจวางกำลังสงวนไว้สำหรับระบบรายงานจังหวัด'));
 }
 
 async function refreshAfterCalendarTypeChange(message) {
@@ -3065,7 +3098,7 @@ function openEntryForm(key = currentSection, existing = null, officePosition = '
     const category = fields.querySelector('[name="category"]');
     const province = fields.querySelector('.calendar-province-picker');
     const syncProvince = () => {
-      const deployment = category.value === CALENDAR_DEPLOYMENT_TYPE;
+      const deployment = category.value === calendarDeploymentType();
       province.hidden = !deployment;
       province.disabled = !deployment;
     };
@@ -3153,8 +3186,8 @@ function submitEntry(event) {
       return;
     }
     const provinces = [...new Set(form.getAll('province'))].sort();
-    fields.province = fields.category === CALENDAR_DEPLOYMENT_TYPE ? provinces.join(',') : '';
-    if (fields.category === CALENDAR_DEPLOYMENT_TYPE &&
+    fields.province = fields.category === calendarDeploymentType() ? provinces.join(',') : '';
+    if (fields.category === calendarDeploymentType() &&
         (!provinces.length || provinces.some(code => !Object.hasOwn(AREAS, code)))) {
       entryError('กรุณาเลือกจังหวัดอย่างน้อย 1 จังหวัด');
       return;
