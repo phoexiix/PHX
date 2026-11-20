@@ -108,10 +108,11 @@ h3 { font-size: 17px; margin: 4px 0 0; }
 .type-reorder-body { padding-top: 14px; }
 .type-reorder-list { display: grid; gap: 7px; }
 .type-reorder-row { display: grid; grid-template-columns: 34px 30px minmax(0,1fr); align-items: center; gap: 10px; min-height: 52px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface, #fff); }
-.type-reorder-row.is-dragging { opacity: .38; }
-.type-reorder-row.is-drop-target { border-color: var(--gold-ink); background: #f7f5ef; }
-.type-reorder-handle { display: grid; place-items: center; width: 30px; height: 34px; border-radius: 6px; background: #f1f2f3; color: #53636d; font-size: 23px; cursor: grab; user-select: none; }
+.type-reorder-handle { display: grid; place-items: center; width: 30px; height: 34px; border-radius: 6px; background: #f1f2f3; color: #53636d; font-size: 23px; cursor: grab; user-select: none; touch-action: none; }
 .type-reorder-handle:active { cursor: grabbing; }
+.type-reorder-placeholder { box-sizing: border-box; border: 2px dashed var(--gold-ink); border-radius: 8px; background: #f7f5ef; }
+.type-reorder-ghost { position: fixed; z-index: 10000; display: grid; grid-template-columns: 34px 30px minmax(0,1fr); align-items: center; gap: 10px; min-height: 52px; padding: 8px 12px; box-sizing: border-box; border: 1px solid var(--gold-ink); border-radius: 8px; background: white; box-shadow: 0 10px 28px #0003; opacity: .96; pointer-events: none; }
+.type-reorder-active { user-select: none; cursor: grabbing; }
 .type-reorder-number { color: var(--muted); font-size: 13px; text-align: center; font-variant-numeric: tabular-nums; }
 .type-reorder-footer { display: flex; justify-content: flex-end; gap: 9px; padding-top: 16px; }
 @media (max-width: 520px) { .type-reorder-row { grid-template-columns: 30px 24px minmax(0,1fr); gap: 7px; padding: 7px; } }
@@ -2240,72 +2241,100 @@ function openTypeReorderDialog(originalNames) {
   const dialog = element('dialog', 'type-reorder-dialog');
   const header = element('div', 'dialog-head');
   const heading = element('div');
-  heading.append(element('h2', '', 'จัดลำดับประเภทงาน'), element('p', 'caption', 'จับสัญลักษณ์ ⠿ แล้วลากขึ้นหรือลงเพื่อเปลี่ยนลำดับ'));
+  heading.append(element('h2', '', 'จัดลำดับประเภทงาน'), element('p', 'caption', 'จับสัญลักษณ์ ⠿ แล้วลากขึ้นหรือลงเพื่อเปลี่ยนลำดับ จากนั้นกดบันทึกลำดับ'));
   const close = button('close', '×', () => dialog.close());
   close.type = 'button'; close.setAttribute('aria-label', 'ปิดหน้าต่าง');
   header.append(heading, close);
   const body = element('div', 'dialog-body type-reorder-body');
   const list = element('div', 'type-reorder-list');
-  let dragged = null;
   let saved = false;
+  let activeDrag = null;
+
+  function updateNumbers() {
+    [...list.querySelectorAll('.type-reorder-row')].forEach((row, index) => {
+      const number = row.querySelector('.type-reorder-number');
+      if (number) number.textContent = String(index + 1);
+    });
+  }
 
   function makeRow(name, index) {
     const row = element('div', 'type-reorder-row');
-    row.draggable = true;
     row.dataset.typeName = name;
     const handle = element('span', 'type-reorder-handle', '⠿');
-    handle.title = 'ลากเพื่อจัดลำดับ';
+    handle.title = 'กดค้างแล้วลากเพื่อจัดลำดับ';
+    handle.setAttribute('role', 'button');
+    handle.setAttribute('aria-label', 'ลากเพื่อจัดลำดับ ' + name);
+    handle.tabIndex = 0;
     const number = element('span', 'type-reorder-number', String(index + 1));
     const tag = calendarTag(name, name);
     row.append(handle, number, tag);
-    row.addEventListener('dragstart', event => {
-      dragged = row;
-      row.classList.add('is-dragging');
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', name);
-    });
-    row.addEventListener('dragend', () => {
-      row.classList.remove('is-dragging');
-      list.querySelectorAll('.is-drop-target').forEach(item => item.classList.remove('is-drop-target'));
-      dragged = null;
-      updateNumbers();
-    });
-    row.addEventListener('dragover', event => {
+
+    handle.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || activeDrag) return;
       event.preventDefault();
-      if (!dragged || dragged === row) return;
-      event.dataTransfer.dropEffect = 'move';
       const rect = row.getBoundingClientRect();
-      const insertAfter = event.clientY > rect.top + rect.height / 2;
-      const reference = insertAfter ? row.nextElementSibling : row;
-      if (reference !== dragged && reference !== dragged?.nextElementSibling) {
-        list.insertBefore(dragged, reference || null);
-      }
-      row.classList.add('is-drop-target');
-    });
-    row.addEventListener('dragleave', event => {
-      if (!row.contains(event.relatedTarget)) row.classList.remove('is-drop-target');
-    });
-    row.addEventListener('drop', event => {
-      event.preventDefault();
-      row.classList.remove('is-drop-target');
-      updateNumbers();
+      const placeholder = element('div', 'type-reorder-placeholder');
+      placeholder.style.height = rect.height + 'px';
+      placeholder.style.width = rect.width + 'px';
+      placeholder.setAttribute('aria-hidden', 'true');
+      const ghost = row.cloneNode(true);
+      ghost.classList.add('type-reorder-ghost');
+      ghost.style.width = rect.width + 'px';
+      ghost.style.height = rect.height + 'px';
+      ghost.style.left = rect.left + 'px';
+      ghost.style.top = rect.top + 'px';
+      ghost.style.pointerEvents = 'none';
+      document.body.append(ghost);
+      row.replaceWith(placeholder);
+      activeDrag = { row, placeholder, ghost, pointerId: event.pointerId, offsetY: event.clientY - rect.top };
+      row.classList.add('is-dragging');
+      document.body.classList.add('type-reorder-active');
     });
     return row;
   }
-  function updateNumbers() {
-    [...list.children].forEach((row, index) => {
-      const number = row.querySelector('.type-reorder-number');
-      if (number) number.textContent = String(index + 1);
-      row.classList.remove('is-drop-target');
-    });
+
+  function moveDrag(event) {
+    if (!activeDrag || event.pointerId !== activeDrag.pointerId) return;
+    event.preventDefault();
+    const { row, placeholder, ghost, offsetY } = activeDrag;
+    const y = event.clientY;
+    ghost.style.top = Math.max(0, y - offsetY) + 'px';
+    const siblings = [...list.querySelectorAll('.type-reorder-row')];
+    let before = null;
+    for (const sibling of siblings) {
+      const rect = sibling.getBoundingClientRect();
+      if (y < rect.top + rect.height / 2) { before = sibling; break; }
+    }
+    if (before) {
+      if (placeholder.nextElementSibling !== before) list.insertBefore(placeholder, before);
+    } else if (placeholder !== list.lastElementChild) {
+      list.append(placeholder);
+    }
   }
+
+  function finishDrag(event, cancelled = false) {
+    if (!activeDrag || (event && event.pointerId !== activeDrag.pointerId)) return;
+    const { row, placeholder, ghost } = activeDrag;
+    if (placeholder.isConnected) placeholder.replaceWith(row);
+    ghost.remove();
+    row.classList.remove('is-dragging');
+    document.body.classList.remove('type-reorder-active');
+    activeDrag = null;
+    updateNumbers();
+  }
+
   originalNames.forEach((name, index) => list.append(makeRow(name, index)));
+  const cancelDrag = event => finishDrag(event, true);
+  document.addEventListener('pointermove', moveDrag, { passive: false });
+  document.addEventListener('pointerup', finishDrag);
+  document.addEventListener('pointercancel', cancelDrag);
+
   const footer = element('div', 'type-reorder-footer');
   const cancel = button('secondary-action', 'ยกเลิก', () => dialog.close());
   cancel.type = 'button';
   const save = button('primary-action', 'บันทึกลำดับ', async () => {
-    if (isLoading || isSaving || save.disabled) return;
-    const order = [...list.children].map(row => row.dataset.typeName);
+    if (isLoading || isSaving || save.disabled || activeDrag) return;
+    const order = [...list.querySelectorAll('.type-reorder-row')].map(row => row.dataset.typeName);
     if (order.every((name, index) => name === originalNames[index])) {
       dialog.close(); return;
     }
@@ -2325,8 +2354,13 @@ function openTypeReorderDialog(originalNames) {
   body.append(list, footer);
   dialog.append(header, body);
   document.body.append(dialog);
-  dialog.addEventListener('close', () => dialog.remove(), { once: true });
-  dialog.addEventListener('cancel', event => { if (!saved) return; event.preventDefault(); });
+  dialog.addEventListener('close', () => {
+    if (activeDrag) finishDrag({ pointerId: activeDrag.pointerId });
+    document.removeEventListener('pointermove', moveDrag);
+    document.removeEventListener('pointerup', finishDrag);
+    document.removeEventListener('pointercancel', cancelDrag);
+    dialog.remove();
+  }, { once: true });
   dialog.showModal();
 }
 
