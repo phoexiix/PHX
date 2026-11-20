@@ -398,6 +398,7 @@ button.area-card:hover { border-color: #b88b55; background: #fffdf8; }
     <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h2m4 0h2"/></symbol>
     <symbol id="i-field77" viewBox="0 0 24 24"><path d="M5 3h12l3 3v15H5Zm4 6h7m-7 4h7m-7 4h5"/></symbol>
     <symbol id="i-travel" viewBox="0 0 24 24"><path d="M3 6h12a4 4 0 0 1 0 8H9a3 3 0 0 0 0 6h12m-4-4 4 4-4 4"/><circle cx="3" cy="6" r="2" fill="white"/></symbol>
+    <symbol id="i-other" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
     <symbol id="i-secret" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 1 0-2 8m2-14v6h-6"/></symbol>
   </defs>
@@ -536,7 +537,8 @@ const SECTIONS = {
   home: { label: 'เมนูหลัก', english: 'COMMAND OVERVIEW' },
   profile: { label: 'ข้อมูลสำนัก', english: 'OFFICE DIRECTORY', description: 'โครงสร้างสำนักและข้อมูลบุคลากร' },
   calendar: { label: 'ตารางปฏิทิน', english: 'COMMAND CALENDAR', description: 'ดูตารางงานรายวันและเพิ่มรายการตามวันที่' },
-  calendarTypes: { label: 'จัดการประเภทงาน', english: 'CALENDAR TYPE MANAGEMENT', description: 'เพิ่ม ลบ และกำหนดสีประเภทตารางงาน' },
+  other: { label: 'อื่นๆ', english: 'OTHER TOOLS', description: 'เครื่องมือเสริมและการตั้งค่าระบบ' },
+  calendarTypes: { label: 'จัดการประเภทงาน', english: 'CALENDAR TYPE MANAGEMENT', description: 'เพิ่ม แก้ไข ลบ และกำหนดสีประเภทตารางงาน' },
   field77: { label: 'ภารกิจวางกำลังฟินิกซ์', english: 'PHOENIX DEPLOYMENT MISSION', description: 'ดูภารกิจแยกตามภาค จังหวัด และอำเภอหรือเขต' },
   travel: { label: 'คำนวณการเดินทางในประเทศ', english: 'DOMESTIC TRAVEL ESTIMATOR', description: 'ประมาณเวลาบินและเวลาขับรถระหว่างจังหวัด' },
   secret: { label: 'เปิดซองลับ', english: 'SEALED REPORTS', description: 'รับรายงานลับจากเจ้าหน้าที่ประจำจังหวัดที่ผ่านการประเมิน' },
@@ -813,6 +815,7 @@ function element(tag, className, text) {
 
 function icon(name) {
   if (name === 'calendarTypes') name = 'calendar';
+  if (name === 'other') name = 'other';
   const namespace = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(namespace, 'svg');
   svg.setAttribute('class', 'icon');
@@ -850,7 +853,7 @@ function navigate(section) {
 }
 
 function setupNavigation() {
-  Object.entries(SECTIONS).forEach(([key, section]) => {
+  Object.entries(SECTIONS).filter(([key]) => !['travel', 'calendarTypes'].includes(key)).forEach(([key, section]) => {
     const node = button('', undefined, () => navigate(key));
     node.dataset.section = key;
     node.append(icon(key), element('span', '', section.label));
@@ -930,12 +933,13 @@ function render() {
   const isHome = currentSection === 'home';
   const isArea = currentSection === 'field77';
   const isTravel = currentSection === 'travel';
+  const isOther = currentSection === 'other';
   const isSecret = currentSection === 'secret';
   const isCalendarTypes = currentSection === 'calendarTypes';
   document.body.dataset.page = currentSection;
   byId('sidebar').hidden = isHome;
   byId('menuToggle').hidden = isHome;
-  byId('addEntry').hidden = isHome || isArea || isTravel || isSecret || isCalendarTypes || !data;
+  byId('addEntry').hidden = isHome || isArea || isTravel || isOther || isSecret || isCalendarTypes || !data;
   byId('areaReport').hidden = !isArea || !data;
   byId('areaReport').disabled = isLoading;
   byId('areaSummary').hidden = !isArea || !areaView.province || !data;
@@ -945,6 +949,10 @@ function render() {
   for (const node of byId('navItems').children) {
     if (node.dataset.section === currentSection) node.setAttribute('aria-current', 'page');
     else node.removeAttribute('aria-current');
+  }
+  if (isOther) {
+    renderOtherTools(target);
+    return;
   }
   if (isSecret) {
     renderSecretReports(target);
@@ -1642,7 +1650,7 @@ function renderOverview(target) {
   ]));
 
   const grid = element('div', 'portal-grid');
-  Object.keys(SECTIONS).filter(key => key !== 'home').forEach(key => {
+  Object.keys(SECTIONS).filter(key => key !== 'home' && !['travel', 'calendarTypes'].includes(key)).forEach(key => {
     const section = SECTIONS[key];
     const card = button('portal-card' + (key === 'profile' ? ' featured' : ''), undefined, () => navigate(key));
     const badge = element('span', 'portal-icon');
@@ -2109,74 +2117,92 @@ function renderOfficeGrid(grid, cards, rows, wireRow) {
 }
 
 
+function renderOtherTools(target) {
+  const intro = element('p', 'caption', 'รวมเครื่องมือเสริมที่ไม่ใช่เมนูหลักไว้ในหน้านี้ เพื่อให้แถบเมนูด้านข้างดูเรียบง่ายขึ้น');
+  const grid = element('div', 'portal-grid');
+  ['travel', 'calendarTypes'].forEach(key => {
+    const section = SECTIONS[key];
+    const card = button('portal-card', undefined, () => navigate(key));
+    const badge = element('span', 'portal-icon');
+    badge.append(icon(key));
+    card.append(badge, element('span', 'portal-meta', 'เปิดเครื่องมือ →'),
+      element('strong', '', section.label), element('span', 'caption', section.description));
+    grid.append(card);
+  });
+  target.replaceChildren(intro, grid);
+}
+
 function renderCalendarTypeManager(target) {
   const panel = element('section', 'panel');
   const head = element('div', 'panel-head');
-  head.append(element('strong', '', 'ประเภทตารางงาน'));
+  head.append(element('strong', '', 'จัดการประเภทงานปฏิทิน'));
   const form = element('form', 'entry-form');
   form.style.padding = '16px';
-  const label = element('label', '', 'ชื่อประเภทงานใหม่');
+  const help = element('p', 'caption', 'เพิ่มประเภทใหม่ได้จากช่องนี้ ระบบจะกำหนดสีให้อัตโนมัติ และสามารถเปลี่ยนชื่อประเภทเดิมได้จากรายการด้านล่าง');
+  help.style.margin = '0 0 12px';
+  const label = element('label', '', 'ชื่อประเภทงาน');
   const input = element('input');
-  input.name = 'typeName';
-  input.maxLength = 80;
-  input.placeholder = 'เช่น ประชุมภารกิจพิเศษ';
-  input.required = true;
+  input.name = 'typeName'; input.maxLength = 80;
+  input.placeholder = 'เช่น ประชุมภารกิจพิเศษ'; input.required = true;
   label.append(input);
-  const error = element('p', 'notice error');
-  error.hidden = true;
-  error.setAttribute('role', 'alert');
+  const error = element('p', 'notice error'); error.hidden = true; error.setAttribute('role', 'alert');
   const actions = element('div', 'entry-actions');
-  const save = element('button', 'primary-action', 'เพิ่มประเภทงาน');
-  save.type = 'submit';
-  actions.append(save);
-  form.append(label, error, actions);
-  const list = element('div');
+  const save = element('button', 'primary-action', 'เพิ่มประเภทงาน'); save.type = 'submit';
+  actions.append(save); form.append(help, label, error, actions);
+  const listWrap = element('div');
+  const listHead = element('div', 'panel-head');
   const types = data.calendarTypes || Object.fromEntries(Object.keys(CALENDAR_TYPES).map(name => [name, {}]));
+  listHead.append(element('strong', '', 'ประเภทงานที่มีอยู่ (' + Object.keys(types).length + ')'));
+  listWrap.append(listHead);
   Object.entries(types).forEach(([name, config]) => {
     const row = element('div', 'item');
-    row.style.gridTemplateColumns = 'minmax(0,1fr) auto';
-    const description = element('span');
-    const swatch = calendarTag(name, name);
-    swatch.style.marginBottom = '5px';
-    description.append(swatch, element('span', 'caption', config?.color ? 'สีที่ระบบกำหนดให้อัตโนมัติ' : 'ประเภทมาตรฐาน'));
+    row.style.gridTemplateColumns = 'minmax(0,1fr) auto auto';
+    const description = element('div');
+    const swatch = calendarTag(name, name); swatch.style.marginBottom = '5px';
+    description.append(swatch, element('div', 'caption', config?.color ? 'สีประจำประเภท · ระบบกำหนดให้อัตโนมัติ' : 'ประเภทมาตรฐานของระบบ'));
+    const edit = button('secondary-action', 'แก้ไข', () => {
+      if (row.querySelector('.type-edit-form')) return;
+      const editForm = element('form', 'type-edit-form');
+      editForm.style.cssText = 'grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;padding-top:10px';
+      const editInput = element('input'); editInput.value = name; editInput.maxLength = 80; editInput.required = true;
+      const saveEdit = element('button', 'primary-action', 'บันทึกชื่อ'); saveEdit.type = 'submit';
+      const cancel = button('secondary-action', 'ยกเลิก', () => editForm.remove());
+      const editError = element('p', 'notice error'); editError.hidden = true; editError.style.gridColumn = '1/-1';
+      editForm.append(editInput, saveEdit, cancel, editError);
+      editForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        const nextName = editInput.value.trim();
+        if (!nextName || nextName === name) { editForm.remove(); return; }
+        saveEdit.disabled = true; cancel.disabled = true;
+        try {
+          await phoenixRequest('updatePhoenixCalendarType', { oldName: name, newName: nextName });
+          await refreshAfterCalendarTypeChange('แก้ไขชื่อประเภทงานเรียบร้อยแล้ว');
+        } catch (err) { editError.textContent = rpcErrorText(err); editError.hidden = false; saveEdit.disabled = false; cancel.disabled = false; }
+      });
+      row.append(editForm); editInput.focus(); editInput.select();
+    });
     const remove = button('secondary-action delete-action', 'ลบ', async () => {
       if (isLoading || isSaving) return;
       remove.disabled = true;
-      try {
-        await phoenixRequest('deletePhoenixCalendarType', { name });
-        await refreshAfterCalendarTypeChange('ลบประเภทงานเรียบร้อยแล้ว');
-      } catch (err) {
-        error.textContent = rpcErrorText(err);
-        error.hidden = false;
-        remove.disabled = false;
-      }
+      try { await phoenixRequest('deletePhoenixCalendarType', { name }); await refreshAfterCalendarTypeChange('ลบประเภทงานเรียบร้อยแล้ว'); }
+      catch (err) { error.textContent = rpcErrorText(err); error.hidden = false; remove.disabled = false; }
     });
     if (name === CALENDAR_DEPLOYMENT_TYPE) {
-      remove.disabled = true;
-      remove.title = 'ประเภทนี้เชื่อมกับระบบรายงานภารกิจวางกำลัง จึงไม่สามารถลบได้';
+      remove.disabled = true; remove.title = 'ประเภทนี้เชื่อมกับระบบรายงานภารกิจวางกำลัง จึงไม่สามารถลบได้';
+      edit.disabled = true; edit.title = 'ประเภทระบบนี้ไม่สามารถเปลี่ยนชื่อได้';
     }
-    row.append(description, remove);
-    list.append(row);
+    row.append(description, edit, remove); listWrap.append(row);
   });
-  if (!Object.keys(types).length) list.append(element('p', 'empty', 'ยังไม่มีประเภทงาน'));
+  if (!Object.keys(types).length) listWrap.append(element('p', 'empty', 'ยังไม่มีประเภทงาน'));
   form.addEventListener('submit', async event => {
-    event.preventDefault();
-    if (isLoading || isSaving) return;
-    const name = input.value.trim();
-    if (!name) return;
-    save.disabled = true;
-    error.hidden = true;
-    try {
-      await phoenixRequest('addPhoenixCalendarType', { name });
-      await refreshAfterCalendarTypeChange('เพิ่มประเภทงานเรียบร้อยแล้ว ระบบกำหนดสีให้อัตโนมัติ');
-    } catch (err) {
-      error.textContent = rpcErrorText(err);
-      error.hidden = false;
-      save.disabled = false;
-    }
+    event.preventDefault(); if (isLoading || isSaving) return;
+    const name = input.value.trim(); if (!name) return;
+    save.disabled = true; error.hidden = true;
+    try { await phoenixRequest('addPhoenixCalendarType', { name }); await refreshAfterCalendarTypeChange('เพิ่มประเภทงานเรียบร้อยแล้ว ระบบกำหนดสีให้อัตโนมัติ'); }
+    catch (err) { error.textContent = rpcErrorText(err); error.hidden = false; save.disabled = false; }
   });
-  panel.append(head, form, list);
-  target.append(panel, element('p', 'caption', 'หมายเหตุ: ประเภทงานที่ถูกใช้ในรายการปฏิทินแล้วจะไม่สามารถลบได้ และประเภทภารกิจวางกำลังถูกสงวนไว้เพื่อคงการทำงานของระบบรายงานจังหวัด'));
+  panel.append(head, form, listWrap);
+  target.replaceChildren(panel, element('p', 'caption', 'หมายเหตุ: หากประเภทงานถูกใช้ในรายการปฏิทินแล้ว จะไม่สามารถลบได้ แต่สามารถเปลี่ยนชื่อได้ โดยรายการเดิมจะเปลี่ยนตามชื่อใหม่ด้วย ประเภท “ภารกิจวางกำลัง” เป็นประเภทระบบที่สงวนไว้'));
 }
 
 async function refreshAfterCalendarTypeChange(message) {
