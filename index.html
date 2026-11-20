@@ -98,12 +98,9 @@ h3 { font-size: 17px; margin: 4px 0 0; }
 .panel { background: white; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .panel-head { padding: 16px 17px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .item { display: grid; grid-template-columns: 67px minmax(0,1fr) auto; width: 100%; align-items: center; gap: 12px; padding: 13px 17px; min-height: 68px; background: white; border: 0; color: var(--ink); text-align: left; }
-.item.type-dragging { opacity: .45; }
-.item.type-drop-target { outline: 2px dashed var(--accent); outline-offset: -3px; background: #f8f6f0; }
-.type-drag-handle { display: inline-grid; place-items: center; width: 34px; height: 36px; border: 1px solid #e5e2da; border-radius: 6px; background: #f7f5f0; color: #65727a; font-size: 20px; line-height: 1; cursor: grab; touch-action: none; user-select: none; }
-.type-drag-handle:active { cursor: grabbing; background: #eee8dc; }
-.item.type-dragging { opacity: .55; background: #f8f6f0; }
-.item.type-drop-target { box-shadow: inset 0 3px 0 #b88b55; outline: none; }
+.type-order-controls { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.type-order-button { width: 34px; height: 28px; border: 1px solid #e5e2da; border-radius: 6px; background: #f7f5f0; color: #53636d; font-size: 17px; line-height: 1; cursor: pointer; }
+.type-order-button:disabled { opacity: .4; cursor: not-allowed; }
 .item.profile-item { grid-template-columns: minmax(0, 1fr); }
 .profile-item .caption { white-space: pre-wrap; }
 .office-structure { overflow-x: auto; padding: 16px; }
@@ -2202,71 +2199,33 @@ function renderCalendarTypeManager(target) {
       remove.disabled = true; remove.title = 'ประเภทนี้เชื่อมกับระบบรายงานภารกิจวางกำลัง จึงไม่สามารถลบได้';
     }
     row.dataset.typeName = name;
-    row.style.gridTemplateColumns = '36px minmax(0,1fr) auto auto';
-    const dragHandle = button('type-drag-handle', '⠿');
-    dragHandle.type = 'button';
-    dragHandle.title = 'จับแล้วลากขึ้นหรือลงเพื่อเปลี่ยนลำดับ';
-    dragHandle.setAttribute('aria-label', 'ลากเพื่อจัดลำดับ ' + name);
-    let pointerDragActive = false;
-    let originalOrder = [];
-    dragHandle.addEventListener('pointerdown', event => {
-      if (event.button !== 0 || isLoading || isSaving || pointerDragActive) return;
-      event.preventDefault();
-      pointerDragActive = true;
-      originalOrder = [...listWrap.querySelectorAll('[data-type-name]')].map(node => node.dataset.typeName);
-      row.classList.add('type-dragging');
-      const pointerId = event.pointerId;
-      const move = moveEvent => {
-        if (!pointerDragActive || moveEvent.pointerId !== pointerId) return;
-        moveEvent.preventDefault();
-        const under = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-        const targetRow = under?.closest?.('[data-type-name]');
-        listWrap.querySelectorAll('.type-drop-target').forEach(node => node.classList.remove('type-drop-target'));
-        if (!targetRow || targetRow === row || !listWrap.contains(targetRow)) return;
-        targetRow.classList.add('type-drop-target');
-        const rect = targetRow.getBoundingClientRect();
-        const insertAfter = moveEvent.clientY > rect.top + rect.height / 2;
-        if (insertAfter) targetRow.after(row);
-        else targetRow.before(row);
-      };
-      const finish = async endEvent => {
-        if (endEvent && endEvent.pointerId !== pointerId) return;
-        document.removeEventListener('pointermove', move);
-        document.removeEventListener('pointerup', finish);
-        document.removeEventListener('pointercancel', cancel);
-        pointerDragActive = false;
-        row.classList.remove('type-dragging');
-        listWrap.querySelectorAll('.type-drop-target').forEach(node => node.classList.remove('type-drop-target'));
-        const nextOrder = [...listWrap.querySelectorAll('[data-type-name]')].map(node => node.dataset.typeName);
-        if (nextOrder.length === originalOrder.length && nextOrder.some((item, index) => item !== originalOrder[index])) {
-          dragHandle.disabled = true;
-          try {
-            await phoenixRequest('reorderPhoenixCalendarTypes', { order: nextOrder });
-            await refreshAfterCalendarTypeChange('ปรับลำดับประเภทงานเรียบร้อยแล้ว');
-          } catch (err) {
-            notice(rpcErrorText(err));
-            renderCalendarTypeManager(target);
-          } finally { dragHandle.disabled = false; }
-        }
-      };
-      const cancel = cancelEvent => {
-        if (cancelEvent.pointerId !== pointerId) return;
-        document.removeEventListener('pointermove', move);
-        document.removeEventListener('pointerup', finish);
-        document.removeEventListener('pointercancel', cancel);
-        pointerDragActive = false;
-        row.classList.remove('type-dragging');
-        listWrap.querySelectorAll('.type-drop-target').forEach(node => node.classList.remove('type-drop-target'));
-        originalOrder.forEach(typeName => {
-          const existing = [...listWrap.querySelectorAll('[data-type-name]')].find(node => node.dataset.typeName === typeName);
-          if (existing) listWrap.append(existing);
-        });
-      };
-      document.addEventListener('pointermove', move, { passive: false });
-      document.addEventListener('pointerup', finish);
-      document.addEventListener('pointercancel', cancel);
-    });
-    row.append(dragHandle, description, edit, remove); listWrap.append(row);
+    const orderControls = element('div', 'type-order-controls');
+    const moveUp = button('type-order-button', '↑', () => moveType(-1));
+    const moveDown = button('type-order-button', '↓', () => moveType(1));
+    moveUp.type = 'button'; moveDown.type = 'button';
+    moveUp.title = 'เลื่อนขึ้น'; moveDown.title = 'เลื่อนลง';
+    moveUp.setAttribute('aria-label', 'เลื่อน ' + name + ' ขึ้น');
+    moveDown.setAttribute('aria-label', 'เลื่อน ' + name + ' ลง');
+    orderControls.append(moveUp, moveDown);
+    async function moveType(direction) {
+      if (isLoading || isSaving || moveUp.disabled || moveDown.disabled) return;
+      const rows = [...listWrap.querySelectorAll('[data-type-name]')];
+      const from = rows.indexOf(row);
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= rows.length) return;
+      const order = rows.map(node => node.dataset.typeName);
+      [order[from], order[to]] = [order[to], order[from]];
+      listWrap.querySelectorAll('button').forEach(control => { control.disabled = true; });
+      try {
+        await phoenixRequest('reorderPhoenixCalendarTypes', { order });
+        await refreshAfterCalendarTypeChange('ปรับลำดับประเภทงานเรียบร้อยแล้ว');
+      } catch (err) {
+        notice(rpcErrorText(err));
+        renderCalendarTypeManager(target);
+      }
+    }
+    row.style.gridTemplateColumns = '42px minmax(0,1fr) auto auto';
+    row.append(orderControls, description, edit, remove); listWrap.append(row);
   });
   if (!Object.keys(types).length) listWrap.append(element('p', 'empty', 'ยังไม่มีประเภทงาน'));
   form.addEventListener('submit', async event => {
@@ -2277,7 +2236,7 @@ function renderCalendarTypeManager(target) {
     catch (err) { error.textContent = rpcErrorText(err); error.hidden = false; save.disabled = false; }
   });
   panel.append(head, form, listWrap);
-  target.replaceChildren(panel, element('p', 'caption', 'วิธีใช้งาน: กด “แก้ไข” เพื่อเปลี่ยนชื่อประเภทงาน หรือจับสัญลักษณ์ ⠿ ด้านซ้ายของแถวแล้วลากขึ้นลงเพื่อจัดลำดับใหม่ สีประจำประเภทจะคงเดิมเมื่อเปลี่ยนชื่อ ส่วนประเภทที่มีรายการปฏิทินใช้งานอยู่จะยังลบไม่ได้ และประเภทภารกิจวางกำลังสงวนไว้สำหรับระบบรายงานจังหวัด'));
+  target.replaceChildren(panel, element('p', 'caption', 'วิธีใช้งาน: ใช้ปุ่ม ↑ และ ↓ ด้านซ้ายของแต่ละประเภทเพื่อเลื่อนลำดับ กด “แก้ไข” เพื่อเปลี่ยนชื่อประเภทงาน สีประจำประเภทจะคงเดิมเมื่อเปลี่ยนชื่อ ส่วนประเภทที่มีรายการปฏิทินใช้งานอยู่จะยังลบไม่ได้ และประเภทภารกิจวางกำลังสงวนไว้สำหรับระบบรายงานจังหวัด'));
 }
 
 async function refreshAfterCalendarTypeChange(message) {
